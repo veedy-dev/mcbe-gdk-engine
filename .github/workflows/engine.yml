@@ -109,7 +109,7 @@ jobs:
               'LD_LIBRARY_PATH=/engine/files/lib/x86_64-linux-gnu /engine/files/bin/wine --version'
           )"
           echo "$out"
-          grep -qE '^wine-[0-9]' <<<"$out"
+          grep -qE '^(wine-|v)[0-9]' <<<"$out"
 
       - name: Retain release candidate for one day
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
