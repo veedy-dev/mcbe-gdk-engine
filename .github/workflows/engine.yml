@@ -1,0 +1,128 @@
+name: Build engine
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: Release-format version used for the non-publishing build
+        required: true
+        default: v0.1.0
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+      id-token: write
+      attestations: write
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Select and validate version
+        run: |
+          if [[ "$GITHUB_REF_TYPE" == tag ]]; then
+            version="$GITHUB_REF_NAME"
+          else
+            version="${{ inputs.version }}"
+          fi
+          [[ "$version" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]
+          echo "VERSION=$version" >>"$GITHUB_ENV"
+
+      - name: Prepare build volume
+        run: |
+          sudo mkdir -p /mnt/engine/prefix /mnt/engine/base
+          sudo chown -R "$(id -u):$(id -g)" /mnt/engine
+
+      - name: Build WineGDK in pinned Debian Bullseye
+        run: |
+          source DEPENDENCIES.lock
+          docker run --rm \
+            -v "$PWD:/winegdk/source:ro" \
+            -v "/mnt/engine/prefix:/prefix" \
+            -w /winegdk/source \
+            "$DEBIAN_IMAGE" \
+            .engine/build-winegdk-container.sh \
+            /winegdk/source /prefix "$GITHUB_SHA"
+          sudo chown -R "$(id -u):$(id -g)" /mnt/engine/prefix
+
+      - name: Retain WineGDK prefix for one day
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: winegdk-prefix
+          path: /mnt/engine/prefix
+          retention-days: 1
+          if-no-files-found: error
+
+      - name: Fetch pinned GDK-Proton base
+        run: |
+          source DEPENDENCIES.lock
+          curl -fL --retry 3 "$GDK_PROTON_URL" \
+            -o "/mnt/engine/base/$GDK_PROTON_ASSET"
+          echo "$GDK_PROTON_SHA256  /mnt/engine/base/$GDK_PROTON_ASSET" |
+            sha256sum -c -
+
+      - name: Package and verify
+        run: |
+          source DEPENDENCIES.lock
+          .engine/package-engine.sh \
+            "$VERSION" "$GITHUB_SHA" /mnt/engine/prefix \
+            "/mnt/engine/base/$GDK_PROTON_ASSET" dist \
+            "$GDK_PROTON_SHA256"
+          .engine/verify-engine.py \
+            "dist/GDK-Proton-mcbe-gdk-$VERSION.tar.gz" "$VERSION"
+          (cd dist && sha256sum -c \
+            "GDK-Proton-mcbe-gdk-$VERSION.tar.gz.sha256")
+
+      - name: Smoke test inside pinned Steam Runtime
+        run: |
+          source DEPENDENCIES.lock
+          mkdir -p /mnt/engine/smoke
+          tar -xzf "dist/GDK-Proton-mcbe-gdk-$VERSION.tar.gz" \
+            -C /mnt/engine/smoke
+          docker pull -q "$STEAM_RUNTIME_IMAGE" >/dev/null
+          out="$(
+            docker run --rm \
+              -v /mnt/engine/smoke/GDK-Proton-mcbe-gdk:/engine:ro \
+              "$STEAM_RUNTIME_IMAGE" \
+              bash -c \
+              'LD_LIBRARY_PATH=/engine/files/lib/x86_64-linux-gnu /engine/files/bin/wine --version'
+          )"
+          echo "$out"
+          grep -qE '^wine-[0-9]' <<<"$out"
+
+      - name: Retain release candidate for one day
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: engine-${{ env.VERSION }}
+          path: |
+            dist/GDK-Proton-mcbe-gdk-${{ env.VERSION }}.tar.gz
+            dist/GDK-Proton-mcbe-gdk-${{ env.VERSION }}.tar.gz.sha256
+          retention-days: 1
+          if-no-files-found: error
+
+      - name: Attest release archive
+        if: ${{ github.ref_type == 'tag' }}
+        uses: actions/attest-build-provenance@e8998f949152b193b063cb0ec769d69d929409be
+        with:
+          subject-path: dist/GDK-Proton-mcbe-gdk-${{ env.VERSION }}.tar.gz
+
+      - name: Publish tagged release
+        if: ${{ github.ref_type == 'tag' }}
+        run: |
+          gh release create "$VERSION" \
+            "dist/GDK-Proton-mcbe-gdk-$VERSION.tar.gz" \
+            "dist/GDK-Proton-mcbe-gdk-$VERSION.tar.gz.sha256" \
+            --verify-tag \
+            --title "MCBE GDK engine $VERSION" \
+            --notes "Open WineGDK compatibility source built in pinned Debian Bullseye and assembled onto the hash-pinned public GDK-Proton base."

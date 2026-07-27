@@ -1,3 +1,18 @@
+# MCBE GDK Engine
+
+Public WineGDK compatibility source and automated engine releases for
+[MCBE GDK Installer](https://github.com/veedy-dev/mcbe-gdk-installer).
+
+- [Engine build and release documentation](ENGINE.md)
+- [Source and tooling attribution](ATTRIBUTION.md)
+- [Pinned dependencies](DEPENDENCIES.lock)
+
+The complete resulting WineGDK source is directly browsable in this
+repository. The history preserves the upstream and compatibility-change
+authors rather than carrying an opaque patch blob.
+
+---
+
 # NOTES FOR PEOPLE TRYING TO RUN MINECRAFT'S GDK BUILD
 
 Microsoft Services have not been added yet. This is because `XUser` hasn't been implemented in `xgameruntime.dll` yet.
