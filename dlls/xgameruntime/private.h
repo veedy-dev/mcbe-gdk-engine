@@ -58,6 +58,7 @@ extern IXThreadingImpl *x_threading_impl;
 extern IXGameRuntimeFeatureImpl *x_game_runtime_feature_impl;
 extern IXNetworkingImpl *x_networking_impl;
 extern IXUserImpl *x_user_impl;
+extern IXGameProtocolImpl *x_gameprotocol_impl;
 
 typedef struct _INITIALIZE_OPTIONS
 {

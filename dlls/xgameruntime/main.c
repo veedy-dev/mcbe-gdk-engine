@@ -363,6 +363,12 @@ HRESULT WINAPI QueryApiImpl( const GUID *runtimeClassId, REFIID interfaceId, voi
         return query_api_result( IXUserImpl_QueryInterface( x_user_impl,
                                  interfaceId, out ), runtimeClassId, interfaceId );
     }
+    else if ( IsEqualGUID( runtimeClassId, &CLSID_XGameProtocolImpl ) )
+    {
+        return query_api_result( IXGameProtocolImpl_QueryInterface(
+                                 x_gameprotocol_impl, interfaceId, out ),
+                                 runtimeClassId, interfaceId );
+    }
 
     /* {0dd112ac} composite XStore service */
     if ( runtimeClassId->Data1 == 0x0dd112ac )
