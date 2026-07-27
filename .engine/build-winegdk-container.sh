@@ -13,12 +13,6 @@ readonly GLIBC_CEILING=2.31
   echo "This script must run as root in the Bullseye container." >&2
   exit 1
 }
-git config --global --add safe.directory "$SOURCE"
-[[ "$(git -C "$SOURCE" rev-parse HEAD)" == "$COMMIT" ]] || {
-  echo "Source checkout does not match $COMMIT." >&2
-  exit 1
-}
-
 "$SOURCE/.engine/pin-apt-snapshot.sh" bullseye
 export DEBIAN_FRONTEND=noninteractive
 apt-get update -qq
@@ -32,6 +26,12 @@ apt-get install -y --no-install-recommends \
   libwayland-dev libx11-dev libxcomposite-dev libxcursor-dev libxext-dev \
   libxfixes-dev libxft-dev libxi-dev libxinerama-dev libxkbcommon-dev \
   libxrandr-dev libxrender-dev libxxf86vm-dev wayland-protocols >/dev/null
+
+git config --global --add safe.directory "$SOURCE"
+[[ "$(git -C "$SOURCE" rev-parse HEAD)" == "$COMMIT" ]] || {
+  echo "Source checkout does not match $COMMIT." >&2
+  exit 1
+}
 
 mkdir -p "$BUILD" "$PREFIX"
 SOURCE_DATE_EPOCH="$(git -C "$SOURCE" show -s --format=%ct "$COMMIT")"
