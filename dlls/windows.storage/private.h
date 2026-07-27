@@ -50,6 +50,7 @@
 
 extern IActivationFactory *random_access_stream_reference_factory;
 extern IActivationFactory *file_open_picker_factory;
+extern IActivationFactory *file_save_picker_factory;
 
 HRESULT hstring_vector_create( IVector_HSTRING **out );
 

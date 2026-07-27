@@ -37,4 +37,5 @@ namespace Windows.Storage.Streams {
 namespace Microsoft.Windows.Storage.Pickers
 {
     runtimeclass FileOpenPicker;
+    runtimeclass FileSavePicker;
 }

@@ -30,6 +30,34 @@ struct file_open_picker
     IVector_HSTRING *filters;
 };
 
+struct file_type_choice
+{
+    HSTRING name;
+    IVector_HSTRING *extensions;
+};
+
+struct file_type_choices
+{
+    IMap_HSTRING_IInspectable IMap_HSTRING_IInspectable_iface;
+    LONG ref;
+    UINT32 size;
+    UINT32 capacity;
+    struct file_type_choice *entries;
+};
+
+struct file_save_picker
+{
+    IFileSavePicker IFileSavePicker_iface;
+    LONG ref;
+    HWND hwnd;
+    PickerLocationId location;
+    HSTRING commit_button_text;
+    struct file_type_choices *choices;
+    HSTRING default_extension;
+    HSTRING suggested_file_name;
+    HSTRING suggested_folder;
+};
+
 struct file_picker_operation
 {
     IAsyncOperation_PickFileResult IAsyncOperation_PickFileResult_iface;
@@ -45,7 +73,11 @@ struct file_picker_operation
 
     HWND hwnd;
     PickerLocationId location;
+    BOOL save;
     HSTRING commit_button_text;
+    HSTRING default_extension;
+    HSTRING suggested_file_name;
+    HSTRING suggested_folder;
     UINT32 filter_count;
     HSTRING *filters;
 };
@@ -86,6 +118,16 @@ struct file_open_picker_factory
     LONG ref;
 };
 
+struct file_save_picker_factory
+{
+    IActivationFactory IActivationFactory_iface;
+    IFileSavePickerFactory IFileSavePickerFactory_iface;
+    LONG ref;
+};
+
+static const IID IID_IFileTypeChoices =
+    {0xe475ca9d, 0x6afb, 0x5992, {0x99, 0x3e, 0x53, 0xe6, 0xef, 0x7a, 0x9e, 0xcd}};
+
 static inline struct pick_file_result *result_from_iface( IPickFileResult *iface )
 {
     return CONTAINING_RECORD( iface, struct pick_file_result, IPickFileResult_iface );
@@ -94,6 +136,16 @@ static inline struct pick_file_result *result_from_iface( IPickFileResult *iface
 static inline struct file_open_picker *picker_from_iface( IFileOpenPicker *iface )
 {
     return CONTAINING_RECORD( iface, struct file_open_picker, IFileOpenPicker_iface );
+}
+
+static inline struct file_type_choices *choices_from_iface( IMap_HSTRING_IInspectable *iface )
+{
+    return CONTAINING_RECORD( iface, struct file_type_choices, IMap_HSTRING_IInspectable_iface );
+}
+
+static inline struct file_save_picker *save_picker_from_iface( IFileSavePicker *iface )
+{
+    return CONTAINING_RECORD( iface, struct file_save_picker, IFileSavePicker_iface );
 }
 
 static inline struct file_picker_operation *operation_from_iface( IAsyncOperation_PickFileResult *iface )
@@ -133,6 +185,16 @@ static inline struct file_open_picker_factory *factory_from_picker_factory( IFil
     return CONTAINING_RECORD( iface, struct file_open_picker_factory, IFileOpenPickerFactory_iface );
 }
 
+static inline struct file_save_picker_factory *save_factory_from_activation( IActivationFactory *iface )
+{
+    return CONTAINING_RECORD( iface, struct file_save_picker_factory, IActivationFactory_iface );
+}
+
+static inline struct file_save_picker_factory *save_factory_from_picker_factory( IFileSavePickerFactory *iface )
+{
+    return CONTAINING_RECORD( iface, struct file_save_picker_factory, IFileSavePickerFactory_iface );
+}
+
 static HRESULT get_iids( ULONG *iid_count, IID **iids, UINT count, const IID *const *values )
 {
     UINT i;
@@ -156,6 +218,206 @@ static HRESULT get_trust_level( TrustLevel *trust_level )
 {
     if (!trust_level) return E_POINTER;
     *trust_level = BaseTrust;
+    return S_OK;
+}
+
+static HRESULT WINAPI choices_QueryInterface( IMap_HSTRING_IInspectable *iface, REFIID iid, void **out )
+{
+    if (!out) return E_POINTER;
+    *out = NULL;
+    if (!IsEqualGUID( iid, &IID_IUnknown ) && !IsEqualGUID( iid, &IID_IInspectable ) &&
+        !IsEqualGUID( iid, &IID_IAgileObject ) && !IsEqualGUID( iid, &IID_IFileTypeChoices ))
+        return E_NOINTERFACE;
+    IMap_HSTRING_IInspectable_AddRef( iface );
+    *out = iface;
+    return S_OK;
+}
+
+static ULONG WINAPI choices_AddRef( IMap_HSTRING_IInspectable *iface )
+{
+    return InterlockedIncrement( &choices_from_iface( iface )->ref );
+}
+
+static HRESULT WINAPI choices_Clear( IMap_HSTRING_IInspectable *iface );
+
+static ULONG WINAPI choices_Release( IMap_HSTRING_IInspectable *iface )
+{
+    struct file_type_choices *choices = choices_from_iface( iface );
+    ULONG ref = InterlockedDecrement( &choices->ref );
+
+    if (!ref)
+    {
+        choices_Clear( iface );
+        free( choices );
+    }
+    return ref;
+}
+
+static HRESULT WINAPI choices_GetIids( IMap_HSTRING_IInspectable *iface, ULONG *count, IID **iids )
+{
+    static const IID *values[] = {&IID_IFileTypeChoices};
+    return get_iids( count, iids, ARRAY_SIZE(values), values );
+}
+
+static HRESULT WINAPI choices_GetRuntimeClassName( IMap_HSTRING_IInspectable *iface, HSTRING *name )
+{
+    if (!name) return E_POINTER;
+    *name = NULL;
+    return S_OK;
+}
+
+static HRESULT WINAPI choices_GetTrustLevel( IMap_HSTRING_IInspectable *iface, TrustLevel *level )
+{
+    return get_trust_level( level );
+}
+
+static struct file_type_choice *choices_find( struct file_type_choices *choices, HSTRING key )
+{
+    UINT32 i;
+    int order;
+
+    for (i = 0; i < choices->size; ++i)
+        if (SUCCEEDED(WindowsCompareStringOrdinal( choices->entries[i].name, key, &order )) && !order)
+            return &choices->entries[i];
+    return NULL;
+}
+
+static HRESULT WINAPI choices_Lookup( IMap_HSTRING_IInspectable *iface, HSTRING key,
+                                      IInspectable **value )
+{
+    struct file_type_choice *entry;
+
+    if (!value) return E_POINTER;
+    *value = NULL;
+    if (!(entry = choices_find( choices_from_iface( iface ), key ))) return E_BOUNDS;
+    IVector_HSTRING_AddRef( entry->extensions );
+    *value = (IInspectable *)entry->extensions;
+    return S_OK;
+}
+
+static HRESULT WINAPI choices_get_Size( IMap_HSTRING_IInspectable *iface, UINT32 *value )
+{
+    if (!value) return E_POINTER;
+    *value = choices_from_iface( iface )->size;
+    return S_OK;
+}
+
+static HRESULT WINAPI choices_HasKey( IMap_HSTRING_IInspectable *iface, HSTRING key,
+                                      boolean *found )
+{
+    if (!found) return E_POINTER;
+    *found = choices_find( choices_from_iface( iface ), key ) != NULL;
+    return S_OK;
+}
+
+static HRESULT WINAPI choices_GetView( IMap_HSTRING_IInspectable *iface,
+                                       IMapView_HSTRING_IInspectable **value )
+{
+    if (!value) return E_POINTER;
+    *value = NULL;
+    return E_NOTIMPL;
+}
+
+static HRESULT WINAPI choices_Insert( IMap_HSTRING_IInspectable *iface, HSTRING key,
+                                      IInspectable *value, boolean *replaced )
+{
+    struct file_type_choices *choices = choices_from_iface( iface );
+    struct file_type_choice *entry;
+    IVector_HSTRING *extensions;
+    HSTRING name;
+    HRESULT hr;
+
+    if (!value || !replaced) return E_POINTER;
+    if (FAILED(hr = IInspectable_QueryInterface( value, &IID_IVector_HSTRING,
+                                                 (void **)&extensions ))) return hr;
+    if ((entry = choices_find( choices, key )))
+    {
+        IVector_HSTRING_Release( entry->extensions );
+        entry->extensions = extensions;
+        *replaced = TRUE;
+        return S_OK;
+    }
+    if (FAILED(hr = WindowsDuplicateString( key, &name )))
+    {
+        IVector_HSTRING_Release( extensions );
+        return hr;
+    }
+    if (choices->size == choices->capacity)
+    {
+        UINT32 capacity = max( 4, choices->capacity * 2 );
+        void *entries = realloc( choices->entries, capacity * sizeof(*choices->entries) );
+        if (!entries)
+        {
+            WindowsDeleteString( name );
+            IVector_HSTRING_Release( extensions );
+            return E_OUTOFMEMORY;
+        }
+        choices->entries = entries;
+        choices->capacity = capacity;
+    }
+    entry = &choices->entries[choices->size++];
+    entry->name = name;
+    entry->extensions = extensions;
+    *replaced = FALSE;
+    return S_OK;
+}
+
+static HRESULT WINAPI choices_Remove( IMap_HSTRING_IInspectable *iface, HSTRING key )
+{
+    struct file_type_choices *choices = choices_from_iface( iface );
+    struct file_type_choice *entry;
+
+    if (!(entry = choices_find( choices, key ))) return E_BOUNDS;
+    WindowsDeleteString( entry->name );
+    IVector_HSTRING_Release( entry->extensions );
+    memmove( entry, entry + 1,
+             (choices->entries + --choices->size - entry) * sizeof(*choices->entries) );
+    return S_OK;
+}
+
+static HRESULT WINAPI choices_Clear( IMap_HSTRING_IInspectable *iface )
+{
+    struct file_type_choices *choices = choices_from_iface( iface );
+
+    while (choices->size)
+    {
+        struct file_type_choice *entry = &choices->entries[--choices->size];
+        WindowsDeleteString( entry->name );
+        IVector_HSTRING_Release( entry->extensions );
+    }
+    free( choices->entries );
+    choices->entries = NULL;
+    choices->capacity = 0;
+    return S_OK;
+}
+
+static const IMap_HSTRING_IInspectableVtbl choices_vtbl =
+{
+    choices_QueryInterface,
+    choices_AddRef,
+    choices_Release,
+    choices_GetIids,
+    choices_GetRuntimeClassName,
+    choices_GetTrustLevel,
+    choices_Lookup,
+    choices_get_Size,
+    choices_HasKey,
+    choices_GetView,
+    choices_Insert,
+    choices_Remove,
+    choices_Clear,
+};
+
+static HRESULT file_type_choices_create( struct file_type_choices **out )
+{
+    struct file_type_choices *choices;
+
+    if (!out) return E_POINTER;
+    *out = NULL;
+    if (!(choices = calloc( 1, sizeof(*choices) ))) return E_OUTOFMEMORY;
+    choices->IMap_HSTRING_IInspectable_iface.lpVtbl = &choices_vtbl;
+    choices->ref = 1;
+    *out = choices;
     return S_OK;
 }
 
@@ -407,6 +669,9 @@ static ULONG operation_release( struct file_picker_operation *operation )
         if (operation->handler) IAsyncOperationCompletedHandler_PickFileResult_Release( operation->handler );
         if (operation->result) IPickFileResult_Release( operation->result );
         WindowsDeleteString( operation->commit_button_text );
+        WindowsDeleteString( operation->default_extension );
+        WindowsDeleteString( operation->suggested_file_name );
+        WindowsDeleteString( operation->suggested_folder );
         for (i = 0; i < operation->filter_count; ++i) WindowsDeleteString( operation->filters[i] );
         free( operation->filters );
         operation->cs.DebugInfo->Spare[0] = 0;
@@ -1058,9 +1323,10 @@ static HRESULT show_file_dialog( struct file_picker_operation *operation, IPickF
     struct dialog_filters filters;
     const KNOWNFOLDERID *folder_id;
     OPENFILENAMEW dialog = {0};
-    const WCHAR *description, *pattern;
-    WCHAR *filter = NULL, *cursor, *initial_dir = NULL, *path = NULL;
+    const WCHAR *default_extension, *description, *initial_dir = NULL, *pattern, *suggested_name;
+    WCHAR *filter = NULL, *cursor, *known_folder = NULL, *path = NULL;
     SIZE_T description_length, filter_length, pattern_length;
+    UINT32 default_extension_length, suggested_name_length, suggested_folder_length;
     DWORD error;
     HRESULT hr;
 
@@ -1085,8 +1351,27 @@ static HRESULT show_file_dialog( struct file_picker_operation *operation, IPickF
     cursor += description_length + 1;
     memcpy( cursor, pattern, pattern_length * sizeof(*cursor) );
 
-    folder_id = known_folder_from_location( operation->location );
-    if (folder_id) SHGetKnownFolderPath( folder_id, 0, NULL, &initial_dir );
+    initial_dir = WindowsGetStringRawBuffer( operation->suggested_folder, &suggested_folder_length );
+    if (!suggested_folder_length)
+    {
+        folder_id = known_folder_from_location( operation->location );
+        if (folder_id) SHGetKnownFolderPath( folder_id, 0, NULL, &known_folder );
+        initial_dir = known_folder;
+    }
+
+    suggested_name = WindowsGetStringRawBuffer( operation->suggested_file_name,
+                                                &suggested_name_length );
+    if (suggested_name_length >= 32768)
+    {
+        hr = E_INVALIDARG;
+        goto done;
+    }
+    memcpy( path, suggested_name, suggested_name_length * sizeof(*path) );
+
+    default_extension = WindowsGetStringRawBuffer( operation->default_extension,
+                                                   &default_extension_length );
+    if (default_extension_length && default_extension[0] == '.')
+        ++default_extension;
 
     dialog.lStructSize = sizeof(dialog);
     dialog.hwndOwner = operation->hwnd;
@@ -1095,9 +1380,11 @@ static HRESULT show_file_dialog( struct file_picker_operation *operation, IPickF
     dialog.lpstrFile = path;
     dialog.nMaxFile = 32768;
     dialog.lpstrInitialDir = initial_dir;
-    dialog.Flags = OFN_EXPLORER | OFN_FILEMUSTEXIST | OFN_PATHMUSTEXIST | OFN_NOCHANGEDIR;
+    dialog.lpstrDefExt = default_extension;
+    dialog.Flags = OFN_EXPLORER | OFN_PATHMUSTEXIST | OFN_NOCHANGEDIR |
+                   (operation->save ? OFN_OVERWRITEPROMPT | OFN_NOREADONLYRETURN : OFN_FILEMUSTEXIST);
 
-    if (GetOpenFileNameW( &dialog ))
+    if ((operation->save ? GetSaveFileNameW( &dialog ) : GetOpenFileNameW( &dialog )))
         hr = pick_file_result_create( path, result );
     else if ((error = CommDlgExtendedError()))
         hr = HRESULT_FROM_WIN32( error );
@@ -1105,7 +1392,7 @@ static HRESULT show_file_dialog( struct file_picker_operation *operation, IPickF
         hr = S_OK;
 
 done:
-    CoTaskMemFree( initial_dir );
+    CoTaskMemFree( known_folder );
     free( path );
     free( filter );
     dialog_filters_destroy( &filters );
@@ -1264,6 +1551,73 @@ static HRESULT file_picker_operation_create( struct file_open_picker *picker,
     hr = show_file_dialog( operation, &result );
     operation_complete( operation, hr, result );
 
+    *out = &operation->IAsyncOperation_PickFileResult_iface;
+    return S_OK;
+
+failed:
+    operation_release( operation );
+    return hr;
+}
+
+static HRESULT save_file_picker_operation_create( struct file_save_picker *picker,
+                                                  IAsyncOperation_PickFileResult **out )
+{
+    struct file_picker_operation *operation;
+    IPickFileResult *result = NULL;
+    UINT32 count, i, j, index = 0;
+    HRESULT hr;
+
+    if (!out) return E_POINTER;
+    *out = NULL;
+    if (!(operation = calloc( 1, sizeof(*operation) ))) return E_OUTOFMEMORY;
+    operation->IAsyncOperation_PickFileResult_iface.lpVtbl = &operation_vtbl;
+    operation->IAsyncInfo_iface.lpVtbl = &async_info_vtbl;
+    operation->ref = 1;
+    operation->status = Started;
+    operation->error = S_OK;
+    operation->hwnd = picker->hwnd;
+    operation->location = picker->location;
+    operation->save = TRUE;
+    InitializeCriticalSectionEx( &operation->cs, 0, RTL_CRITICAL_SECTION_FLAG_FORCE_DEBUG_INFO );
+    operation->cs.DebugInfo->Spare[0] = (DWORD_PTR)(__FILE__ ": save_file_picker_operation.cs");
+
+    if (FAILED(hr = WindowsDuplicateString( picker->commit_button_text,
+                                            &operation->commit_button_text ))) goto failed;
+    if (FAILED(hr = WindowsDuplicateString( picker->default_extension,
+                                            &operation->default_extension ))) goto failed;
+    if (FAILED(hr = WindowsDuplicateString( picker->suggested_file_name,
+                                            &operation->suggested_file_name ))) goto failed;
+    if (FAILED(hr = WindowsDuplicateString( picker->suggested_folder,
+                                            &operation->suggested_folder ))) goto failed;
+
+    for (i = 0; i < picker->choices->size; ++i)
+    {
+        if (FAILED(hr = IVector_HSTRING_get_Size( picker->choices->entries[i].extensions,
+                                                  &count ))) goto failed;
+        if (count > ~(UINT32)0 - operation->filter_count)
+        {
+            hr = E_OUTOFMEMORY;
+            goto failed;
+        }
+        operation->filter_count += count;
+    }
+    if (operation->filter_count &&
+        !(operation->filters = calloc( operation->filter_count, sizeof(*operation->filters) )))
+    {
+        hr = E_OUTOFMEMORY;
+        goto failed;
+    }
+    for (i = 0; i < picker->choices->size; ++i)
+    {
+        if (FAILED(hr = IVector_HSTRING_get_Size( picker->choices->entries[i].extensions,
+                                                  &count ))) goto failed;
+        for (j = 0; j < count; ++j)
+            if (FAILED(hr = IVector_HSTRING_GetAt( picker->choices->entries[i].extensions, j,
+                                                   &operation->filters[index++] ))) goto failed;
+    }
+
+    hr = show_file_dialog( operation, &result );
+    operation_complete( operation, hr, result );
     *out = &operation->IAsyncOperation_PickFileResult_iface;
     return S_OK;
 
@@ -1469,6 +1823,21 @@ static BOOL valid_location( PickerLocationId value )
     }
 }
 
+static HRESULT replace_hstring( HSTRING value, HSTRING *destination )
+{
+    const WCHAR *buffer = WindowsGetStringRawBuffer( value, NULL );
+    UINT32 length, i;
+    HSTRING copy;
+    HRESULT hr;
+
+    WindowsGetStringRawBuffer( value, &length );
+    for (i = 0; i < length; ++i) if (!buffer[i]) return E_INVALIDARG;
+    if (FAILED(hr = WindowsDuplicateString( value, &copy ))) return hr;
+    WindowsDeleteString( *destination );
+    *destination = copy;
+    return S_OK;
+}
+
 static HRESULT WINAPI picker_get_SuggestedStartLocation( IFileOpenPicker *iface, PickerLocationId *value )
 {
     if (!value) return E_POINTER;
@@ -1491,18 +1860,7 @@ static HRESULT WINAPI picker_get_CommitButtonText( IFileOpenPicker *iface, HSTRI
 
 static HRESULT WINAPI picker_put_CommitButtonText( IFileOpenPicker *iface, HSTRING value )
 {
-    struct file_open_picker *picker = picker_from_iface( iface );
-    const WCHAR *buffer = WindowsGetStringRawBuffer( value, NULL );
-    UINT32 length, i;
-    HSTRING copy;
-    HRESULT hr;
-
-    WindowsGetStringRawBuffer( value, &length );
-    for (i = 0; i < length; ++i) if (!buffer[i]) return E_INVALIDARG;
-    if (FAILED(hr = WindowsDuplicateString( value, &copy ))) return hr;
-    WindowsDeleteString( picker->commit_button_text );
-    picker->commit_button_text = copy;
-    return S_OK;
+    return replace_hstring( value, &picker_from_iface( iface )->commit_button_text );
 }
 
 static HRESULT WINAPI picker_get_FileTypeFilter( IFileOpenPicker *iface, IVector_HSTRING **value )
@@ -1563,6 +1921,177 @@ static HRESULT file_open_picker_create( WindowId window_id, IFileOpenPicker **ou
         return hr;
     }
     *out = &picker->IFileOpenPicker_iface;
+    return S_OK;
+}
+
+static HRESULT WINAPI save_picker_QueryInterface( IFileSavePicker *iface, REFIID iid, void **out )
+{
+    if (!out) return E_POINTER;
+    *out = NULL;
+    if (!IsEqualGUID( iid, &IID_IUnknown ) && !IsEqualGUID( iid, &IID_IInspectable ) &&
+        !IsEqualGUID( iid, &IID_IAgileObject ) && !IsEqualGUID( iid, &IID_IFileSavePicker ))
+        return E_NOINTERFACE;
+    IFileSavePicker_AddRef( iface );
+    *out = iface;
+    return S_OK;
+}
+
+static ULONG WINAPI save_picker_AddRef( IFileSavePicker *iface )
+{
+    return InterlockedIncrement( &save_picker_from_iface( iface )->ref );
+}
+
+static ULONG WINAPI save_picker_Release( IFileSavePicker *iface )
+{
+    struct file_save_picker *picker = save_picker_from_iface( iface );
+    ULONG ref = InterlockedDecrement( &picker->ref );
+
+    if (!ref)
+    {
+        WindowsDeleteString( picker->commit_button_text );
+        IMap_HSTRING_IInspectable_Release( &picker->choices->IMap_HSTRING_IInspectable_iface );
+        WindowsDeleteString( picker->default_extension );
+        WindowsDeleteString( picker->suggested_file_name );
+        WindowsDeleteString( picker->suggested_folder );
+        free( picker );
+    }
+    return ref;
+}
+
+static HRESULT WINAPI save_picker_GetIids( IFileSavePicker *iface, ULONG *count, IID **iids )
+{
+    static const IID *values[] = {&IID_IFileSavePicker};
+    return get_iids( count, iids, ARRAY_SIZE(values), values );
+}
+
+static HRESULT WINAPI save_picker_GetRuntimeClassName( IFileSavePicker *iface, HSTRING *name )
+{
+    return get_runtime_class_name( RuntimeClass_Microsoft_Windows_Storage_Pickers_FileSavePicker, name );
+}
+
+static HRESULT WINAPI save_picker_GetTrustLevel( IFileSavePicker *iface, TrustLevel *level )
+{
+    return get_trust_level( level );
+}
+
+static HRESULT WINAPI save_picker_get_SuggestedStartLocation( IFileSavePicker *iface,
+                                                              PickerLocationId *value )
+{
+    if (!value) return E_POINTER;
+    *value = save_picker_from_iface( iface )->location;
+    return S_OK;
+}
+
+static HRESULT WINAPI save_picker_put_SuggestedStartLocation( IFileSavePicker *iface,
+                                                              PickerLocationId value )
+{
+    if (!valid_location( value )) return E_INVALIDARG;
+    save_picker_from_iface( iface )->location = value;
+    return S_OK;
+}
+
+static HRESULT WINAPI save_picker_get_CommitButtonText( IFileSavePicker *iface, HSTRING *value )
+{
+    if (!value) return E_POINTER;
+    return WindowsDuplicateString( save_picker_from_iface( iface )->commit_button_text, value );
+}
+
+static HRESULT WINAPI save_picker_put_CommitButtonText( IFileSavePicker *iface, HSTRING value )
+{
+    return replace_hstring( value, &save_picker_from_iface( iface )->commit_button_text );
+}
+
+static HRESULT WINAPI save_picker_get_FileTypeChoices( IFileSavePicker *iface,
+                                                       IInspectable **value )
+{
+    struct file_save_picker *picker = save_picker_from_iface( iface );
+
+    if (!value) return E_POINTER;
+    IMap_HSTRING_IInspectable_AddRef( &picker->choices->IMap_HSTRING_IInspectable_iface );
+    *value = (IInspectable *)&picker->choices->IMap_HSTRING_IInspectable_iface;
+    return S_OK;
+}
+
+static HRESULT WINAPI save_picker_get_DefaultFileExtension( IFileSavePicker *iface,
+                                                            HSTRING *value )
+{
+    if (!value) return E_POINTER;
+    return WindowsDuplicateString( save_picker_from_iface( iface )->default_extension, value );
+}
+
+static HRESULT WINAPI save_picker_put_DefaultFileExtension( IFileSavePicker *iface, HSTRING value )
+{
+    return replace_hstring( value, &save_picker_from_iface( iface )->default_extension );
+}
+
+static HRESULT WINAPI save_picker_get_SuggestedFileName( IFileSavePicker *iface, HSTRING *value )
+{
+    if (!value) return E_POINTER;
+    return WindowsDuplicateString( save_picker_from_iface( iface )->suggested_file_name, value );
+}
+
+static HRESULT WINAPI save_picker_put_SuggestedFileName( IFileSavePicker *iface, HSTRING value )
+{
+    return replace_hstring( value, &save_picker_from_iface( iface )->suggested_file_name );
+}
+
+static HRESULT WINAPI save_picker_get_SuggestedFolder( IFileSavePicker *iface, HSTRING *value )
+{
+    if (!value) return E_POINTER;
+    return WindowsDuplicateString( save_picker_from_iface( iface )->suggested_folder, value );
+}
+
+static HRESULT WINAPI save_picker_put_SuggestedFolder( IFileSavePicker *iface, HSTRING value )
+{
+    return replace_hstring( value, &save_picker_from_iface( iface )->suggested_folder );
+}
+
+static HRESULT WINAPI save_picker_PickSaveFileAsync( IFileSavePicker *iface,
+                                                     IAsyncOperation_PickFileResult **operation )
+{
+    return save_file_picker_operation_create( save_picker_from_iface( iface ), operation );
+}
+
+static const IFileSavePickerVtbl save_picker_vtbl =
+{
+    save_picker_QueryInterface,
+    save_picker_AddRef,
+    save_picker_Release,
+    save_picker_GetIids,
+    save_picker_GetRuntimeClassName,
+    save_picker_GetTrustLevel,
+    save_picker_get_SuggestedStartLocation,
+    save_picker_put_SuggestedStartLocation,
+    save_picker_get_CommitButtonText,
+    save_picker_put_CommitButtonText,
+    save_picker_get_FileTypeChoices,
+    save_picker_get_DefaultFileExtension,
+    save_picker_put_DefaultFileExtension,
+    save_picker_get_SuggestedFileName,
+    save_picker_put_SuggestedFileName,
+    save_picker_get_SuggestedFolder,
+    save_picker_put_SuggestedFolder,
+    save_picker_PickSaveFileAsync,
+};
+
+static HRESULT file_save_picker_create( WindowId window_id, IFileSavePicker **out )
+{
+    struct file_save_picker *picker;
+    HRESULT hr;
+
+    if (!out) return E_POINTER;
+    *out = NULL;
+    if (!(picker = calloc( 1, sizeof(*picker) ))) return E_OUTOFMEMORY;
+    picker->IFileSavePicker_iface.lpVtbl = &save_picker_vtbl;
+    picker->ref = 1;
+    picker->hwnd = (HWND)(ULONG_PTR)window_id.Value;
+    picker->location = PickerLocationId_Unspecified;
+    if (FAILED(hr = file_type_choices_create( &picker->choices )))
+    {
+        free( picker );
+        return hr;
+    }
+    *out = &picker->IFileSavePicker_iface;
     return S_OK;
 }
 
@@ -1695,3 +2224,141 @@ static struct file_open_picker_factory factory =
 };
 
 IActivationFactory *file_open_picker_factory = &factory.IActivationFactory_iface;
+
+static HRESULT save_factory_query_interface( struct file_save_picker_factory *factory,
+                                             REFIID iid, void **out )
+{
+    if (!out) return E_POINTER;
+    *out = NULL;
+    if (IsEqualGUID( iid, &IID_IUnknown ) || IsEqualGUID( iid, &IID_IInspectable ) ||
+        IsEqualGUID( iid, &IID_IAgileObject ) || IsEqualGUID( iid, &IID_IActivationFactory ))
+        *out = &factory->IActivationFactory_iface;
+    else if (IsEqualGUID( iid, &IID_IFileSavePickerFactory ))
+        *out = &factory->IFileSavePickerFactory_iface;
+    else
+        return E_NOINTERFACE;
+    InterlockedIncrement( &factory->ref );
+    return S_OK;
+}
+
+static ULONG save_factory_add_ref( struct file_save_picker_factory *factory )
+{
+    return InterlockedIncrement( &factory->ref );
+}
+
+static ULONG save_factory_release( struct file_save_picker_factory *factory )
+{
+    return InterlockedDecrement( &factory->ref );
+}
+
+static HRESULT WINAPI save_activation_QueryInterface( IActivationFactory *iface, REFIID iid,
+                                                      void **out )
+{
+    return save_factory_query_interface( save_factory_from_activation( iface ), iid, out );
+}
+
+static ULONG WINAPI save_activation_AddRef( IActivationFactory *iface )
+{
+    return save_factory_add_ref( save_factory_from_activation( iface ) );
+}
+
+static ULONG WINAPI save_activation_Release( IActivationFactory *iface )
+{
+    return save_factory_release( save_factory_from_activation( iface ) );
+}
+
+static HRESULT WINAPI save_activation_GetIids( IActivationFactory *iface, ULONG *count, IID **iids )
+{
+    static const IID *values[] = {&IID_IActivationFactory, &IID_IFileSavePickerFactory};
+    return get_iids( count, iids, ARRAY_SIZE(values), values );
+}
+
+static HRESULT WINAPI save_activation_GetRuntimeClassName( IActivationFactory *iface, HSTRING *name )
+{
+    return get_runtime_class_name( RuntimeClass_Microsoft_Windows_Storage_Pickers_FileSavePicker, name );
+}
+
+static HRESULT WINAPI save_activation_GetTrustLevel( IActivationFactory *iface, TrustLevel *level )
+{
+    return get_trust_level( level );
+}
+
+static HRESULT WINAPI save_activation_ActivateInstance( IActivationFactory *iface,
+                                                        IInspectable **instance )
+{
+    if (instance) *instance = NULL;
+    return E_NOTIMPL;
+}
+
+static const IActivationFactoryVtbl save_activation_vtbl =
+{
+    save_activation_QueryInterface,
+    save_activation_AddRef,
+    save_activation_Release,
+    save_activation_GetIids,
+    save_activation_GetRuntimeClassName,
+    save_activation_GetTrustLevel,
+    save_activation_ActivateInstance,
+};
+
+static HRESULT WINAPI save_picker_factory_QueryInterface( IFileSavePickerFactory *iface,
+                                                          REFIID iid, void **out )
+{
+    return save_factory_query_interface( save_factory_from_picker_factory( iface ), iid, out );
+}
+
+static ULONG WINAPI save_picker_factory_AddRef( IFileSavePickerFactory *iface )
+{
+    return save_factory_add_ref( save_factory_from_picker_factory( iface ) );
+}
+
+static ULONG WINAPI save_picker_factory_Release( IFileSavePickerFactory *iface )
+{
+    return save_factory_release( save_factory_from_picker_factory( iface ) );
+}
+
+static HRESULT WINAPI save_picker_factory_GetIids( IFileSavePickerFactory *iface,
+                                                   ULONG *count, IID **iids )
+{
+    static const IID *values[] = {&IID_IActivationFactory, &IID_IFileSavePickerFactory};
+    return get_iids( count, iids, ARRAY_SIZE(values), values );
+}
+
+static HRESULT WINAPI save_picker_factory_GetRuntimeClassName( IFileSavePickerFactory *iface,
+                                                               HSTRING *name )
+{
+    return get_runtime_class_name( RuntimeClass_Microsoft_Windows_Storage_Pickers_FileSavePicker, name );
+}
+
+static HRESULT WINAPI save_picker_factory_GetTrustLevel( IFileSavePickerFactory *iface,
+                                                         TrustLevel *level )
+{
+    return get_trust_level( level );
+}
+
+static HRESULT WINAPI save_picker_factory_CreateInstance( IFileSavePickerFactory *iface,
+                                                          WindowId window_id,
+                                                          IFileSavePicker **value )
+{
+    return file_save_picker_create( window_id, value );
+}
+
+static const IFileSavePickerFactoryVtbl save_picker_factory_vtbl =
+{
+    save_picker_factory_QueryInterface,
+    save_picker_factory_AddRef,
+    save_picker_factory_Release,
+    save_picker_factory_GetIids,
+    save_picker_factory_GetRuntimeClassName,
+    save_picker_factory_GetTrustLevel,
+    save_picker_factory_CreateInstance,
+};
+
+static struct file_save_picker_factory save_factory =
+{
+    {&save_activation_vtbl},
+    {&save_picker_factory_vtbl},
+    1,
+};
+
+IActivationFactory *file_save_picker_factory = &save_factory.IActivationFactory_iface;

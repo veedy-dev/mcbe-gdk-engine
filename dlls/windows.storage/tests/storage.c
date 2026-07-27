@@ -260,6 +260,120 @@ static void test_FileOpenPicker(void)
     IFileOpenPickerFactory_Release( picker_factory );
 }
 
+static void test_FileSavePicker(void)
+{
+    static const WCHAR save_class_name[] = L"Microsoft.Windows.Storage.Pickers.FileSavePicker";
+    static const WCHAR open_class_name[] = L"Microsoft.Windows.Storage.Pickers.FileOpenPicker";
+    static const IID choices_iid =
+        {0xe475ca9d, 0x6afb, 0x5992, {0x99, 0x3e, 0x53, 0xe6, 0xef, 0x7a, 0x9e, 0xcd}};
+    IFileSavePickerFactory *save_factory = NULL;
+    IFileOpenPickerFactory *open_factory = NULL;
+    IFileSavePicker *save_picker = NULL;
+    IFileOpenPicker *open_picker = NULL;
+    IMap_HSTRING_IInspectable *choices = NULL, *choices_copy = NULL;
+    IVector_HSTRING *extensions = NULL;
+    IInspectable *value = NULL;
+    WindowId window_id = {0};
+    HSTRING name = NULL, key = NULL, extension = NULL, copy = NULL;
+    PickerLocationId location;
+    boolean replaced;
+    UINT32 size;
+    HRESULT hr;
+
+    hr = WindowsCreateString( save_class_name, ARRAY_SIZE(save_class_name) - 1, &name );
+    ok( hr == S_OK, "got hr %#lx.\n", hr );
+    hr = RoGetActivationFactory( name, &IID_IFileSavePickerFactory, (void **)&save_factory );
+    WindowsDeleteString( name );
+    name = NULL;
+    if (hr == REGDB_E_CLASSNOTREG)
+    {
+        win_skip( "%s runtimeclass not registered, skipping tests.\n",
+                  wine_dbgstr_w(save_class_name) );
+        return;
+    }
+    ok( hr == S_OK, "got hr %#lx.\n", hr );
+    if (FAILED(hr)) return;
+
+    hr = IFileSavePickerFactory_CreateInstance( save_factory, window_id, &save_picker );
+    ok( hr == S_OK, "got hr %#lx.\n", hr );
+    if (FAILED(hr)) goto done;
+    check_interface( save_picker, &IID_IUnknown, FALSE );
+    check_interface( save_picker, &IID_IInspectable, FALSE );
+    check_interface( save_picker, &IID_IAgileObject, FALSE );
+    hr = IFileSavePicker_PickSaveFileAsync( save_picker, NULL );
+    ok( hr == E_POINTER, "got hr %#lx.\n", hr );
+
+    hr = IFileSavePicker_get_SuggestedStartLocation( save_picker, &location );
+    ok( hr == S_OK && location == PickerLocationId_Unspecified,
+        "got hr %#lx, location %d.\n", hr, location );
+    hr = IFileSavePicker_put_SuggestedStartLocation( save_picker, PickerLocationId_Downloads );
+    ok( hr == S_OK, "got hr %#lx.\n", hr );
+    hr = IFileSavePicker_put_SuggestedStartLocation( save_picker, 4 );
+    ok( hr == E_INVALIDARG, "got hr %#lx.\n", hr );
+
+    hr = WindowsCreateString( L"structure.mcstructure", 21, &name );
+    ok( hr == S_OK, "got hr %#lx.\n", hr );
+    hr = IFileSavePicker_put_SuggestedFileName( save_picker, name );
+    ok( hr == S_OK, "got hr %#lx.\n", hr );
+    hr = IFileSavePicker_get_SuggestedFileName( save_picker, &copy );
+    ok( hr == S_OK && !wcscmp( WindowsGetStringRawBuffer( copy, NULL ),
+                               L"structure.mcstructure" ), "got hr %#lx, value %s.\n",
+        hr, debugstr_hstring(copy) );
+    WindowsDeleteString( copy );
+    copy = NULL;
+    WindowsDeleteString( name );
+    name = NULL;
+
+    hr = IFileSavePicker_get_FileTypeChoices( save_picker, &value );
+    ok( hr == S_OK, "got hr %#lx.\n", hr );
+    choices = (IMap_HSTRING_IInspectable *)value;
+    hr = IMap_HSTRING_IInspectable_QueryInterface( choices, &choices_iid,
+                                                   (void **)&choices_copy );
+    ok( hr == S_OK, "got hr %#lx.\n", hr );
+    if (SUCCEEDED(hr)) IMap_HSTRING_IInspectable_Release( choices_copy );
+    hr = IMap_HSTRING_IInspectable_get_Size( choices, &size );
+    ok( hr == S_OK && !size, "got hr %#lx, size %u.\n", hr, size );
+
+    hr = WindowsCreateString( open_class_name, ARRAY_SIZE(open_class_name) - 1, &name );
+    ok( hr == S_OK, "got hr %#lx.\n", hr );
+    hr = RoGetActivationFactory( name, &IID_IFileOpenPickerFactory, (void **)&open_factory );
+    WindowsDeleteString( name );
+    name = NULL;
+    ok( hr == S_OK, "got hr %#lx.\n", hr );
+    if (FAILED(hr)) goto done;
+    hr = IFileOpenPickerFactory_CreateInstance( open_factory, window_id, &open_picker );
+    ok( hr == S_OK, "got hr %#lx.\n", hr );
+    if (FAILED(hr)) goto done;
+    hr = IFileOpenPicker_get_FileTypeFilter( open_picker, &extensions );
+    ok( hr == S_OK, "got hr %#lx.\n", hr );
+    hr = WindowsCreateString( L".mcstructure", 12, &extension );
+    ok( hr == S_OK, "got hr %#lx.\n", hr );
+    hr = IVector_HSTRING_Append( extensions, extension );
+    ok( hr == S_OK, "got hr %#lx.\n", hr );
+    WindowsDeleteString( extension );
+    extension = NULL;
+    hr = WindowsCreateString( L"Minecraft Structure", 19, &key );
+    ok( hr == S_OK, "got hr %#lx.\n", hr );
+    replaced = TRUE;
+    hr = IMap_HSTRING_IInspectable_Insert( choices, key, (IInspectable *)extensions, &replaced );
+    ok( hr == S_OK && !replaced, "got hr %#lx, replaced %u.\n", hr, replaced );
+    hr = IMap_HSTRING_IInspectable_get_Size( choices, &size );
+    ok( hr == S_OK && size == 1, "got hr %#lx, size %u.\n", hr, size );
+    WindowsDeleteString( key );
+    key = NULL;
+
+done:
+    WindowsDeleteString( extension );
+    WindowsDeleteString( key );
+    WindowsDeleteString( name );
+    if (extensions) IVector_HSTRING_Release( extensions );
+    if (open_picker) IFileOpenPicker_Release( open_picker );
+    if (open_factory) IFileOpenPickerFactory_Release( open_factory );
+    if (choices) IMap_HSTRING_IInspectable_Release( choices );
+    if (save_picker) IFileSavePicker_Release( save_picker );
+    if (save_factory) IFileSavePickerFactory_Release( save_factory );
+}
+
 START_TEST(storage)
 {
     HRESULT hr;
@@ -269,6 +383,7 @@ START_TEST(storage)
 
     test_RandomAccessStreamReference();
     test_FileOpenPicker();
+    test_FileSavePicker();
 
     RoUninitialize();
 }

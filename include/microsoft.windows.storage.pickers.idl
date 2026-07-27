@@ -26,9 +26,12 @@ namespace Microsoft.Windows.Storage.Pickers
 
     interface IFileOpenPicker;
     interface IFileOpenPickerFactory;
+    interface IFileSavePicker;
+    interface IFileSavePickerFactory;
     interface IPickFileResult;
 
     runtimeclass FileOpenPicker;
+    runtimeclass FileSavePicker;
     runtimeclass PickFileResult;
 
     [contractversion(1.8)]
@@ -124,5 +127,52 @@ namespace Microsoft.Windows.Storage.Pickers
     runtimeclass FileOpenPicker
     {
         [default] interface Microsoft.Windows.Storage.Pickers.IFileOpenPicker;
+    }
+
+    [
+        contract(Microsoft.Windows.Storage.Pickers.StoragePickersContract, 1.8),
+        exclusiveto(Microsoft.Windows.Storage.Pickers.FileSavePicker),
+        uuid(79f1f4df-741b-59b2-aa06-fe9ac817b7dd)
+    ]
+    interface IFileSavePicker : IInspectable
+    {
+        [propget] HRESULT SuggestedStartLocation([out, retval] Microsoft.Windows.Storage.Pickers.PickerLocationId *value);
+        [propput] HRESULT SuggestedStartLocation([in] Microsoft.Windows.Storage.Pickers.PickerLocationId value);
+        [propget] HRESULT CommitButtonText([out, retval] HSTRING *value);
+        [propput] HRESULT CommitButtonText([in] HSTRING value);
+        /* The ABI is an IMap<HSTRING, IVector<HSTRING> *> pointer. Keeping
+         * IInspectable here avoids widl's unsupported nested generic while
+         * preserving the pointer ABI and the published interface IID. */
+        [propget] HRESULT FileTypeChoices([out, retval] IInspectable **value);
+        [propget] HRESULT DefaultFileExtension([out, retval] HSTRING *value);
+        [propput] HRESULT DefaultFileExtension([in] HSTRING value);
+        [propget] HRESULT SuggestedFileName([out, retval] HSTRING *value);
+        [propput] HRESULT SuggestedFileName([in] HSTRING value);
+        [propget] HRESULT SuggestedFolder([out, retval] HSTRING *value);
+        [propput] HRESULT SuggestedFolder([in] HSTRING value);
+        HRESULT PickSaveFileAsync([out, retval] Windows.Foundation.IAsyncOperation<Microsoft.Windows.Storage.Pickers.PickFileResult *> **operation);
+    }
+
+    [
+        contract(Microsoft.Windows.Storage.Pickers.StoragePickersContract, 1.8),
+        exclusiveto(Microsoft.Windows.Storage.Pickers.FileSavePicker),
+        uuid(2e256696-30b6-5a05-a8f5-c752db6dd268)
+    ]
+    interface IFileSavePickerFactory : IInspectable
+    {
+        HRESULT CreateInstance([in] Microsoft.UI.WindowId window_id,
+                               [out, retval] Microsoft.Windows.Storage.Pickers.FileSavePicker **value);
+    }
+
+    [
+        activatable(Microsoft.Windows.Storage.Pickers.IFileSavePickerFactory,
+                    Microsoft.Windows.Storage.Pickers.StoragePickersContract, 1.8),
+        contract(Microsoft.Windows.Storage.Pickers.StoragePickersContract, 1.8),
+        marshaling_behavior(agile),
+        threading(both)
+    ]
+    runtimeclass FileSavePicker
+    {
+        [default] interface Microsoft.Windows.Storage.Pickers.IFileSavePicker;
     }
 }
