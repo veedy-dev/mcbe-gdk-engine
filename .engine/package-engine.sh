@@ -43,11 +43,14 @@ cp -a "${base_roots[0]}/." "$engine/"
 "$ROOT/.engine/apply-graphics.sh" \
   "$engine" "$DXVK" "$VKD3D" "$DXVK_SHA" "$VKD3D_SHA"
 
-for arch in x86_64-windows i386-windows; do
-  dll="$engine/files/lib/wine/$arch/xgameruntime.dll"
-  [[ ! -f "$dll" ]] || cp -a "$dll" "$dll.threading"
-done
+threading="$engine/files/lib/wine/x86_64-windows/xgameruntime.dll.threading"
+[[ -f "$threading" ]] || {
+  echo "GDK-Proton base is missing the native XTaskQueue sidecar." >&2
+  exit 1
+}
+threading_sha="$(sha256sum "$threading" | cut -d' ' -f1)"
 cp -a --remove-destination "$PREFIX/." "$engine/files/"
+echo "$threading_sha  $threading" | sha256sum -c -
 for alias in wine64 wine-preloader wine64-preloader; do
   rm -f "$engine/files/bin/$alias"
   ln -s wine "$engine/files/bin/$alias"

@@ -33,6 +33,7 @@ fixed = (
     "files/bin/wine",
     "files/bin/wineserver",
     "files/lib/wine/x86_64-windows/xgameruntime.dll",
+    "files/lib/wine/x86_64-windows/xgameruntime.dll.threading",
     "files/lib/wine/i386-windows/xgameruntime.dll",
     "files/lib/wine/x86_64-windows/ntdll.dll",
 )

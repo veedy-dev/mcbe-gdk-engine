@@ -21,6 +21,7 @@ printf '#!/bin/sh\necho wine-test\n' >"$work/base/GDK-Proton10-32/proton"
 chmod +x "$work/base/GDK-Proton10-32/proton"
 printf base >"$work/base/GDK-Proton10-32/files/lib/wine/x86_64-windows/xgameruntime.dll"
 printf base >"$work/base/GDK-Proton10-32/files/lib/wine/i386-windows/xgameruntime.dll"
+printf threading >"$work/base/GDK-Proton10-32/files/lib/wine/x86_64-windows/xgameruntime.dll.threading"
 printf wine >"$work/prefix/bin/wine"
 printf server >"$work/prefix/bin/wineserver"
 printf xuser >"$work/prefix/lib/wine/x86_64-windows/xgameruntime.dll"
@@ -67,3 +68,7 @@ cmp \
 "$ROOT/.engine/verify-engine.py" \
   "$work/dist/GDK-Proton-mcbe-gdk-v0.0.0.tar.gz" v0.0.0
 (cd "$work/dist" && sha256sum -c GDK-Proton-mcbe-gdk-v0.0.0.tar.gz.sha256)
+[[ "$(
+  tar -xOf "$work/dist/GDK-Proton-mcbe-gdk-v0.0.0.tar.gz" \
+    GDK-Proton-mcbe-gdk/files/lib/wine/x86_64-windows/xgameruntime.dll.threading
+)" == threading ]]
