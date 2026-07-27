@@ -4,7 +4,16 @@ import json
 import sys
 from pathlib import Path
 
-engine, version, commit, base_sha, source_manifest, lock = sys.argv[1:]
+(
+    engine,
+    version,
+    commit,
+    base_sha,
+    dxvk_sha,
+    vkd3d_sha,
+    source_manifest,
+    lock,
+) = sys.argv[1:]
 engine = Path(engine)
 
 
@@ -64,8 +73,16 @@ manifest = {
             "asset": dependencies["gdk_proton_asset"],
             "sha256": base_sha,
         },
-        "dxvk": dependencies["dxvk_pin"],
-        "vkd3d_proton": dependencies["vkd3d_proton_pin"],
+        "dxvk": {
+            "version": dependencies["dxvk_version"],
+            "asset": dependencies["dxvk_asset"],
+            "sha256": dxvk_sha,
+        },
+        "vkd3d_proton": {
+            "version": dependencies["vkd3d_proton_version"],
+            "asset": dependencies["vkd3d_proton_asset"],
+            "sha256": vkd3d_sha,
+        },
         "steam_runtime_image": dependencies["steam_runtime_image"],
     },
     "build_environment": build,

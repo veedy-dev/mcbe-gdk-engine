@@ -3,12 +3,16 @@ set -Eeuo pipefail
 export LC_ALL=C LANG=C TZ=UTC
 umask 022
 
-VERSION="${1:?usage: package-engine.sh VERSION COMMIT PREFIX BASE DIST BASE_SHA}"
-COMMIT="${2:?usage: package-engine.sh VERSION COMMIT PREFIX BASE DIST BASE_SHA}"
-PREFIX="${3:?usage: package-engine.sh VERSION COMMIT PREFIX BASE DIST BASE_SHA}"
-BASE="${4:?usage: package-engine.sh VERSION COMMIT PREFIX BASE DIST BASE_SHA}"
-DIST="${5:?usage: package-engine.sh VERSION COMMIT PREFIX BASE DIST BASE_SHA}"
-BASE_SHA="${6:?usage: package-engine.sh VERSION COMMIT PREFIX BASE DIST BASE_SHA}"
+VERSION="${1:?usage: package-engine.sh VERSION COMMIT PREFIX BASE DXVK VKD3D DIST BASE_SHA DXVK_SHA VKD3D_SHA}"
+COMMIT="${2:?usage: package-engine.sh VERSION COMMIT PREFIX BASE DXVK VKD3D DIST BASE_SHA DXVK_SHA VKD3D_SHA}"
+PREFIX="${3:?usage: package-engine.sh VERSION COMMIT PREFIX BASE DXVK VKD3D DIST BASE_SHA DXVK_SHA VKD3D_SHA}"
+BASE="${4:?usage: package-engine.sh VERSION COMMIT PREFIX BASE DXVK VKD3D DIST BASE_SHA DXVK_SHA VKD3D_SHA}"
+DXVK="${5:?usage: package-engine.sh VERSION COMMIT PREFIX BASE DXVK VKD3D DIST BASE_SHA DXVK_SHA VKD3D_SHA}"
+VKD3D="${6:?usage: package-engine.sh VERSION COMMIT PREFIX BASE DXVK VKD3D DIST BASE_SHA DXVK_SHA VKD3D_SHA}"
+DIST="${7:?usage: package-engine.sh VERSION COMMIT PREFIX BASE DXVK VKD3D DIST BASE_SHA DXVK_SHA VKD3D_SHA}"
+BASE_SHA="${8:?usage: package-engine.sh VERSION COMMIT PREFIX BASE DXVK VKD3D DIST BASE_SHA DXVK_SHA VKD3D_SHA}"
+DXVK_SHA="${9:?usage: package-engine.sh VERSION COMMIT PREFIX BASE DXVK VKD3D DIST BASE_SHA DXVK_SHA VKD3D_SHA}"
+VKD3D_SHA="${10:?usage: package-engine.sh VERSION COMMIT PREFIX BASE DXVK VKD3D DIST BASE_SHA DXVK_SHA VKD3D_SHA}"
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd -P)"
 
 [[ "$VERSION" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]] || {
@@ -36,18 +40,33 @@ mapfile -t base_roots < <(find "$work/base" -mindepth 1 -maxdepth 1 -type d)
 }
 engine="$work/GDK-Proton-mcbe-gdk"
 cp -a "${base_roots[0]}/." "$engine/"
+"$ROOT/.engine/apply-graphics.sh" \
+  "$engine" "$DXVK" "$VKD3D" "$DXVK_SHA" "$VKD3D_SHA"
 
 for arch in x86_64-windows i386-windows; do
   dll="$engine/files/lib/wine/$arch/xgameruntime.dll"
   [[ ! -f "$dll" ]] || cp -a "$dll" "$dll.threading"
 done
-cp -a "$PREFIX/." "$engine/files/"
+cp -a --remove-destination "$PREFIX/." "$engine/files/"
+for alias in wine64 wine-preloader wine64-preloader; do
+  rm -f "$engine/files/bin/$alias"
+  ln -s wine "$engine/files/bin/$alias"
+done
+rm -rf "$engine/files/lib/wine/i386-unix" "$engine/files/include"
+rm -rf "$engine/files/bin-wow64"
+install -d -m755 "$engine/files/bin-wow64"
+cp -a "$engine/files/bin/wine" "$engine/files/bin-wow64/wine"
+cp -a "$engine/files/bin/wineserver" "$engine/files/bin-wow64/wineserver"
+ln -s wine "$engine/files/bin-wow64/wine-preloader"
+ln -s wine "$engine/files/bin-wow64/msidb"
+find "$engine" -type f -name '*.pyc' -delete
+find "$engine" -depth -type d -name '__pycache__' -empty -delete
 cp "$ROOT/LICENSE" "$engine/WineGDK-LICENSE"
 cp "$ROOT/COPYING.LIB" "$engine/COPYING.LIB"
 cp "$ROOT/ATTRIBUTION.md" "$engine/ATTRIBUTION.md"
 
 python3 "$ROOT/.engine/write-manifest.py" \
-  "$engine" "$VERSION" "$COMMIT" "$BASE_SHA" \
+  "$engine" "$VERSION" "$COMMIT" "$BASE_SHA" "$DXVK_SHA" "$VKD3D_SHA" \
   "$ROOT/SOURCE-SHA256SUMS" "$ROOT/DEPENDENCIES.lock"
 
 epoch="$(git -C "$ROOT" show -s --format=%ct "$COMMIT")"

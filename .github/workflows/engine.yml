@@ -69,7 +69,15 @@ jobs:
           source DEPENDENCIES.lock
           curl -fL --retry 3 "$GDK_PROTON_URL" \
             -o "/mnt/engine/base/$GDK_PROTON_ASSET"
+          curl -fL --retry 3 "$DXVK_URL" \
+            -o "/mnt/engine/base/$DXVK_ASSET"
+          curl -fL --retry 3 "$VKD3D_PROTON_URL" \
+            -o "/mnt/engine/base/$VKD3D_PROTON_ASSET"
           echo "$GDK_PROTON_SHA256  /mnt/engine/base/$GDK_PROTON_ASSET" |
+            sha256sum -c -
+          echo "$DXVK_SHA256  /mnt/engine/base/$DXVK_ASSET" |
+            sha256sum -c -
+          echo "$VKD3D_PROTON_SHA256  /mnt/engine/base/$VKD3D_PROTON_ASSET" |
             sha256sum -c -
 
       - name: Package and verify
@@ -77,8 +85,10 @@ jobs:
           source DEPENDENCIES.lock
           .engine/package-engine.sh \
             "$VERSION" "$GITHUB_SHA" /mnt/engine/prefix \
-            "/mnt/engine/base/$GDK_PROTON_ASSET" dist \
-            "$GDK_PROTON_SHA256"
+            "/mnt/engine/base/$GDK_PROTON_ASSET" \
+            "/mnt/engine/base/$DXVK_ASSET" \
+            "/mnt/engine/base/$VKD3D_PROTON_ASSET" dist \
+            "$GDK_PROTON_SHA256" "$DXVK_SHA256" "$VKD3D_PROTON_SHA256"
           .engine/verify-engine.py \
             "dist/GDK-Proton-mcbe-gdk-$VERSION.tar.gz" "$VERSION"
           (cd dist && sha256sum -c \
