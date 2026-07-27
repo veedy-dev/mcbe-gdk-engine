@@ -3,6 +3,10 @@
 Public WineGDK compatibility source and automated engine releases for
 [MCBE GDK Installer](https://github.com/veedy-dev/mcbe-gdk-installer).
 
+> Looking to install Minecraft builds? Use
+> [MCBE GDK Installer](https://github.com/veedy-dev/mcbe-gdk-installer).
+> This repository contains only the compatibility-engine source and releases.
+
 - [Engine build and release documentation](ENGINE.md)
 - [Source and tooling attribution](ATTRIBUTION.md)
 - [Pinned dependencies](DEPENDENCIES.lock)
