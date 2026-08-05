@@ -1,0 +1,4 @@
+TESTDLL = microsoft.windowsappruntime.bootstrap.dll
+
+SOURCES = \
+	bootstrap.c

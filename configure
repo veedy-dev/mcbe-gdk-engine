@@ -1246,6 +1246,7 @@ enable_mfreadwrite
 enable_mfsrcsnk
 enable_mgmtapi
 enable_midimap
+enable_microsoft_windowsappruntime_bootstrap
 enable_mlang
 enable_mmcndmgr
 enable_mmdevapi
@@ -22733,6 +22734,8 @@ wine_fn_config_makefile dlls/mfsrcsnk enable_mfsrcsnk
 wine_fn_config_makefile dlls/mfsrcsnk/tests enable_tests
 wine_fn_config_makefile dlls/mgmtapi enable_mgmtapi
 wine_fn_config_makefile dlls/midimap enable_midimap
+wine_fn_config_makefile dlls/microsoft.windowsappruntime.bootstrap enable_microsoft_windowsappruntime_bootstrap
+wine_fn_config_makefile dlls/microsoft.windowsappruntime.bootstrap/tests enable_tests
 wine_fn_config_makefile dlls/mlang enable_mlang
 wine_fn_config_makefile dlls/mlang/tests enable_tests
 wine_fn_config_makefile dlls/mmcndmgr enable_mmcndmgr

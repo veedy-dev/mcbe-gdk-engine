@@ -1,0 +1,4 @@
+MODULE = microsoft.windowsappruntime.bootstrap.dll
+
+SOURCES = \
+	main.c

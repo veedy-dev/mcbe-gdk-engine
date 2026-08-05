@@ -19,6 +19,9 @@ The resulting source implements these GameCore interfaces:
 - CLSID `95fd18d2-74dd-4d7c-aa1b-0b51827665d6`
 - IID `026b010c-06c3-4cdd-bbcb-43f229db1cff`
 
+It also supplies a Windows App Runtime bootstrap compatibility DLL for
+Minecraft builds that bundle the matching runtime beside the executable.
+
 Wine and WineGDK remain licensed under the LGPL-2.1-or-later terms in
 `LICENSE` and `COPYING.LIB`. Additional provenance is in `ATTRIBUTION.md`.
 
