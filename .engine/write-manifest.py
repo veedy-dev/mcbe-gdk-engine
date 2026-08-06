@@ -28,16 +28,24 @@ for line in Path(lock).read_text().splitlines():
         dependencies[key.lower()] = value
 
 critical = {}
-fixed = (
+fixed = [
     "proton",
     "files/bin/wine",
     "files/bin/wineserver",
     "files/lib/wine/x86_64-unix/ntdll.so",
-    "files/lib/wine/x86_64-windows/xgameruntime.dll",
     "files/lib/wine/x86_64-windows/xgameruntime.dll.threading",
-    "files/lib/wine/i386-windows/xgameruntime.dll",
     "files/lib/wine/x86_64-windows/ntdll.dll",
-)
+]
+for arch in ("i386-windows", "x86_64-windows"):
+    for module in (
+        "combase.dll",
+        "microsoft.windowsappruntime.bootstrap.dll",
+        "windows.storage.applicationdata.dll",
+        "windows.storage.dll",
+        "winex11.drv",
+        "xgameruntime.dll",
+    ):
+        fixed.append(f"files/lib/wine/{arch}/{module}")
 for relative in fixed:
     path = engine / relative
     if not path.is_file():

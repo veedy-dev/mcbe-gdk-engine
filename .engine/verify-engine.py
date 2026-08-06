@@ -61,5 +61,10 @@ with tarfile.open(archive, "r:gz") as bundle:
 
     relative = "files/bin/wineserver"
     member = bundle.getmember(root + relative)
-    if b"/dev/ntsync" not in bundle.extractfile(member).read():
-        raise SystemExit(f"NTSync support is missing: {relative}")
+    wineserver = bundle.extractfile(member).read()
+    for implementation in (b"WINEESYNC", b"WINEFSYNC", b"/dev/ntsync"):
+        if implementation not in wineserver:
+            raise SystemExit(
+                f"synchronization support is missing from {relative}: "
+                f"{implementation.decode()}"
+            )
