@@ -38,9 +38,8 @@ mapfile -t base_roots < <(find "$work/base" -mindepth 1 -maxdepth 1 -type d)
   echo "GDK-Proton archive must contain one root directory." >&2
   exit 1
 }
-base_engine="${base_roots[0]}"
 engine="$work/GDK-Proton-mcbe-gdk"
-cp -a "$base_engine/." "$engine/"
+cp -a "${base_roots[0]}/." "$engine/"
 "$ROOT/.engine/apply-graphics.sh" \
   "$engine" "$DXVK" "$VKD3D" "$DXVK_SHA" "$VKD3D_SHA"
 
@@ -50,60 +49,19 @@ threading="$engine/files/lib/wine/x86_64-windows/xgameruntime.dll.threading"
   exit 1
 }
 threading_sha="$(sha256sum "$threading" | cut -d' ' -f1)"
-modules=(
-  combase.dll
-  microsoft.windowsappruntime.bootstrap.dll
-  windows.storage.applicationdata.dll
-  windows.storage.dll
-  winex11.drv
-  xgameruntime.dll
-)
-for arch in i386-windows x86_64-windows; do
-  for module in "${modules[@]}"; do
-    source="$PREFIX/lib/wine/$arch/$module"
-    target="$engine/files/lib/wine/$arch/$module"
-    [[ -f "$source" ]] || {
-      echo "WineGDK build is missing $arch/$module." >&2
-      exit 1
-    }
-    cp -a --remove-destination "$source" "$target"
-  done
-done
-for pair in i386-windows:syswow64 x86_64-windows:system32; do
-  arch="${pair%%:*}"
-  system="${pair##*:}"
-  for module in "${modules[@]}"; do
-    source="$PREFIX/share/default_pfx/drive_c/windows/$system/$module"
-    [[ -f "$source" ]] || continue
-    target="$engine/files/share/default_pfx/drive_c/windows/$system/$module"
-    cp -a --remove-destination "$source" "$target"
-  done
-done
-for metadata in .mcbe-build-env .mcbe-package-versions.tsv; do
-  [[ -f "$PREFIX/$metadata" ]] || {
-    echo "WineGDK build metadata is missing $metadata." >&2
-    exit 1
-  }
-  install -m644 "$PREFIX/$metadata" "$engine/files/$metadata"
-done
+cp -a --remove-destination "$PREFIX/." "$engine/files/"
 echo "$threading_sha  $threading" | sha256sum -c -
-preserved=(
-  files/bin
-  files/bin-wow64
-  files/include
-  files/lib/wine/i386-unix
-  files/lib/wine/x86_64-unix
-  files/lib/wine/i386-windows/ntdll.dll
-  files/lib/wine/x86_64-windows/ntdll.dll
-)
-for relative in "${preserved[@]}"; do
-  [[ ! -e "$base_engine/$relative" ]] ||
-    diff -qr --no-dereference \
-      "$base_engine/$relative" "$engine/$relative" >/dev/null || {
-        echo "Packaging changed the GDK-Proton runtime: $relative" >&2
-        exit 1
-      }
+for alias in wine64 wine-preloader wine64-preloader; do
+  rm -f "$engine/files/bin/$alias"
+  ln -s wine "$engine/files/bin/$alias"
 done
+rm -rf "$engine/files/lib/wine/i386-unix" "$engine/files/include"
+rm -rf "$engine/files/bin-wow64"
+install -d -m755 "$engine/files/bin-wow64"
+cp -a "$engine/files/bin/wine" "$engine/files/bin-wow64/wine"
+cp -a "$engine/files/bin/wineserver" "$engine/files/bin-wow64/wineserver"
+ln -s wine "$engine/files/bin-wow64/wine-preloader"
+ln -s wine "$engine/files/bin-wow64/msidb"
 find "$engine" -type f -name '*.pyc' -delete
 find "$engine" -depth -type d -name '__pycache__' -empty -delete
 cp "$ROOT/LICENSE" "$engine/WineGDK-LICENSE"

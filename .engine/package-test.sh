@@ -8,6 +8,7 @@ base="$work/base/GDK-Proton10-32"
 prefix="$work/prefix"
 modules=(
   combase.dll
+  kernel32.dll
   microsoft.windowsappruntime.bootstrap.dll
   windows.storage.applicationdata.dll
   windows.storage.dll
@@ -45,7 +46,7 @@ printf base-server >"$base/files/bin/wineserver"
 printf base-wow64 >"$base/files/bin-wow64/wine"
 printf base-include >"$base/files/include/wine.h"
 printf winegdk-wine >"$prefix/bin/wine"
-printf 'winegdk WINEESYNC WINEFSYNC /dev/ntsync' >"$prefix/bin/wineserver"
+printf winegdk-server >"$prefix/bin/wineserver"
 printf winegdk-wow64 >"$prefix/bin-wow64/wine"
 printf winegdk-include >"$prefix/include/wine.h"
 
@@ -93,12 +94,9 @@ package_versions_sha256=test
 EOF
 printf 'package\tversion\n' >"$prefix/.mcbe-package-versions.tsv"
 
-tar -czf "$work/base-bad.tar.gz" -C "$work/base" GDK-Proton10-32
-printf 'base WINEESYNC WINEFSYNC /dev/ntsync' >"$base/files/bin/wineserver"
 tar -czf "$work/base.tar.gz" -C "$work/base" GDK-Proton10-32
 tar -czf "$work/dxvk.tar.gz" -C "$work/dxvk" dxvk-3.0.1
 tar -czf "$work/vkd3d.tar.gz" -C "$work/vkd3d" vkd3d-proton-3.0.1-nv-dgc
-bad_base_sha="$(sha256sum "$work/base-bad.tar.gz" | cut -d' ' -f1)"
 base_sha="$(sha256sum "$work/base.tar.gz" | cut -d' ' -f1)"
 dxvk_sha="$(sha256sum "$work/dxvk.tar.gz" | cut -d' ' -f1)"
 vkd3d_sha="$(sha256sum "$work/vkd3d.tar.gz" | cut -d' ' -f1)"
@@ -106,14 +104,15 @@ commit="$(git -C "$ROOT" rev-parse HEAD)"
 
 "$ROOT/.engine/package-engine.sh" \
   v0.0.0 "$commit" \
-  "$prefix" "$work/base-bad.tar.gz" \
+  "$prefix" "$work/base.tar.gz" \
   "$work/dxvk.tar.gz" "$work/vkd3d.tar.gz" "$work/dist-bad" \
-  "$bad_base_sha" "$dxvk_sha" "$vkd3d_sha"
+  "$base_sha" "$dxvk_sha" "$vkd3d_sha"
 if "$ROOT/.engine/verify-engine.py" \
   "$work/dist-bad/GDK-Proton-mcbe-gdk-v0.0.0.tar.gz" v0.0.0; then
-  echo "Verification accepted a base without synchronization support." >&2
+  echo "Verification accepted an engine without NTSync." >&2
   exit 1
 fi
+printf 'winegdk-server /dev/ntsync' >"$prefix/bin/wineserver"
 
 for dist in dist dist2; do
   "$ROOT/.engine/package-engine.sh" \
@@ -132,19 +131,17 @@ cmp \
 mkdir "$work/result"
 tar -xzf "$work/dist/GDK-Proton-mcbe-gdk-v0.0.0.tar.gz" -C "$work/result"
 result="$work/result/GDK-Proton-mcbe-gdk"
-for relative in \
-  files/bin \
-  files/bin-wow64 \
-  files/include \
-  files/lib/wine/i386-unix \
-  files/lib/wine/x86_64-unix \
-  files/lib/wine/i386-windows/ntdll.dll \
-  files/lib/wine/x86_64-windows/ntdll.dll; do
-  diff -qr --no-dereference "$base/$relative" "$result/$relative"
-done
+cmp "$prefix/bin/wine" "$result/files/bin/wine"
+cmp "$prefix/bin/wineserver" "$result/files/bin/wineserver"
+cmp "$prefix/bin/wine" "$result/files/bin-wow64/wine"
+cmp "$prefix/bin/wineserver" "$result/files/bin-wow64/wineserver"
+cmp "$prefix/lib/wine/x86_64-unix/ntdll.so" \
+  "$result/files/lib/wine/x86_64-unix/ntdll.so"
 for pair in i386-windows:syswow64 x86_64-windows:system32; do
   arch="${pair%%:*}"
   system="${pair##*:}"
+  cmp "$prefix/lib/wine/$arch/ntdll.dll" \
+    "$result/files/lib/wine/$arch/ntdll.dll"
   for module in "${modules[@]}"; do
     cmp "$prefix/lib/wine/$arch/$module" \
       "$result/files/lib/wine/$arch/$module"

@@ -135,4 +135,4 @@ jobs:
             "dist/GDK-Proton-mcbe-gdk-$VERSION.tar.gz.sha256" \
             --verify-tag \
             --title "MCBE GDK engine $VERSION" \
-            --notes "Open WineGDK compatibility modules built in pinned Debian Bullseye and overlaid onto the preserved, hash-pinned public GDK-Proton runtime."
+            --notes "Restores the complete matched WineGDK runtime so Xbox sign-in and GameCore compatibility work with NTSync enabled."
