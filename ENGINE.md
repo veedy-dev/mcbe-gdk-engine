@@ -44,6 +44,9 @@ modules with another Wine version is not supported. Rebuilding every external
 binary dependency from source is deferred.
 The Linux 6.14 NTSync UAPI header is vendored and hash-pinned so this older
 build environment retains Wine's NTSync implementation on compatible hosts.
+Wine is compiled with the pinned GDK-Proton runtime's conservative Nocona ISA
+and Core-AVX2 scheduling tune. This does not require AVX and keeps every
+WineGDK PE and Unix component in one matched build for Xbox sign-in.
 
 ## Build
 

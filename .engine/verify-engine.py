@@ -47,6 +47,10 @@ with tarfile.open(archive, "r:gz") as bundle:
     ntsync = manifest["dependencies"]["ntsync_uapi"]
     if build.get("ntsync_enabled") != "1":
         raise SystemExit("build did not enable NTSync")
+    if build.get("wine_cflags") != (
+        "-O2 -march=nocona -mtune=core-avx2 -mfpmath=sse"
+    ):
+        raise SystemExit("Wine runtime is missing the reviewed CPU tuning")
     if (
         build.get("ntsync_uapi_version") != ntsync["version"]
         or build.get("ntsync_uapi_sha256") != ntsync["sha256"]

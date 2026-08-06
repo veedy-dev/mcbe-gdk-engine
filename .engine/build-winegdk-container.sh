@@ -7,9 +7,13 @@ SOURCE="${1:?usage: build-winegdk-container.sh SOURCE PREFIX COMMIT}"
 PREFIX="${2:?usage: build-winegdk-container.sh SOURCE PREFIX COMMIT}"
 COMMIT="${3:?usage: build-winegdk-container.sh SOURCE PREFIX COMMIT}"
 BUILD=/winegdk/build
+# Match the pinned GDK-Proton runtime's conservative x86 tuning without
+# requiring AVX. This keeps the complete WineGDK runtime ABI-matched while
+# avoiding the generic compiler target used by earlier engine releases.
+WINE_CFLAGS="-O2 -march=nocona -mtune=core-avx2 -mfpmath=sse"
 
 # The source path is chosen by the build container.
-# shellcheck disable=SC1091
+# shellcheck disable=SC1090,SC1091
 source "$SOURCE/DEPENDENCIES.lock"
 NTSYNC_HEADER="$SOURCE/.engine/uapi/linux/ntsync.h"
 echo "$NTSYNC_UAPI_SHA256  $NTSYNC_HEADER" | sha256sum -c -
@@ -43,7 +47,8 @@ SOURCE_DATE_EPOCH="$(git -C "$SOURCE" show -s --format=%ct "$COMMIT")"
 export SOURCE_DATE_EPOCH
 (
   cd "$BUILD"
-  CPPFLAGS="-I$SOURCE/.engine/uapi" "$SOURCE/configure" \
+  CFLAGS="$WINE_CFLAGS" CROSSCFLAGS="$WINE_CFLAGS" \
+    CPPFLAGS="-I$SOURCE/.engine/uapi" "$SOURCE/configure" \
     --enable-archs=i386,x86_64 \
     --disable-tests \
     --prefix="$PREFIX"
@@ -90,5 +95,6 @@ glibc_ceiling=$GLIBC_CEILING
 ntsync_enabled=1
 ntsync_uapi_version=$NTSYNC_UAPI_VERSION
 ntsync_uapi_sha256=$NTSYNC_UAPI_SHA256
+wine_cflags=$WINE_CFLAGS
 package_versions_sha256=$(sha256sum "$PREFIX/.mcbe-package-versions.tsv" | cut -d' ' -f1)
 EOF
