@@ -90,6 +90,7 @@ glibc_ceiling=2.31
 ntsync_enabled=1
 ntsync_uapi_version=linux-v6.14
 ntsync_uapi_sha256=006437ee52a3e04f921df77081eb5c21c44c71f598b10ac534c6ef9e78296262
+wine_cflags=-O2 -march=nocona -mtune=core-avx2 -mfpmath=sse
 package_versions_sha256=test
 EOF
 printf 'package\tversion\n' >"$prefix/.mcbe-package-versions.tsv"
