@@ -40,6 +40,8 @@ The WineGDK compatibility source is open and built in a pinned Debian
 Bullseye container with a glibc 2.31 ceiling. The initial engine still
 assembles that build onto the public, hash-pinned Weather-OS GDK-Proton binary
 base. Rebuilding every external binary dependency from source is deferred.
+The Linux 6.14 NTSync UAPI header is vendored and hash-pinned so this older
+build environment retains Wine's NTSync implementation on compatible hosts.
 
 ## Build
 

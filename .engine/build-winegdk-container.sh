@@ -7,7 +7,12 @@ SOURCE="${1:?usage: build-winegdk-container.sh SOURCE PREFIX COMMIT}"
 PREFIX="${2:?usage: build-winegdk-container.sh SOURCE PREFIX COMMIT}"
 COMMIT="${3:?usage: build-winegdk-container.sh SOURCE PREFIX COMMIT}"
 BUILD=/winegdk/build
-readonly GLIBC_CEILING=2.31
+
+# The source path is chosen by the build container.
+# shellcheck disable=SC1091
+source "$SOURCE/DEPENDENCIES.lock"
+NTSYNC_HEADER="$SOURCE/.engine/uapi/linux/ntsync.h"
+echo "$NTSYNC_UAPI_SHA256  $NTSYNC_HEADER" | sha256sum -c -
 
 [[ "$(id -u)" == 0 ]] || {
   echo "This script must run as root in the Bullseye container." >&2
@@ -38,10 +43,14 @@ SOURCE_DATE_EPOCH="$(git -C "$SOURCE" show -s --format=%ct "$COMMIT")"
 export SOURCE_DATE_EPOCH
 (
   cd "$BUILD"
-  "$SOURCE/configure" \
+  CPPFLAGS="-I$SOURCE/.engine/uapi" "$SOURCE/configure" \
     --enable-archs=i386,x86_64 \
     --disable-tests \
     --prefix="$PREFIX"
+  grep -qx '#define HAVE_LINUX_NTSYNC_H 1' include/config.h || {
+    echo "Wine configure did not enable NTSync." >&2
+    exit 1
+  }
   make -j"$(nproc)"
   make install
 )
@@ -78,5 +87,8 @@ source_date_epoch=$SOURCE_DATE_EPOCH
 debian_suite=bullseye
 debian_snapshot=20260701T000000Z
 glibc_ceiling=$GLIBC_CEILING
+ntsync_enabled=1
+ntsync_uapi_version=$NTSYNC_UAPI_VERSION
+ntsync_uapi_sha256=$NTSYNC_UAPI_SHA256
 package_versions_sha256=$(sha256sum "$PREFIX/.mcbe-package-versions.tsv" | cut -d' ' -f1)
 EOF

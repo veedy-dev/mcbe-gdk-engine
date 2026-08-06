@@ -12,6 +12,7 @@ mkdir -p \
   "$work/base/GDK-Proton10-32/files/lib/wine/vkd3d-proton/x86_64-windows" \
   "$work/base/GDK-Proton10-32/files/lib/wine/vkd3d-proton/i386-windows" \
   "$work/prefix/bin" "$work/prefix/lib/wine/x86_64-windows" \
+  "$work/prefix/lib/wine/x86_64-unix" \
   "$work/prefix/lib/wine/i386-windows" \
   "$work/dxvk/dxvk-3.0.1/x64" "$work/dxvk/dxvk-3.0.1/x32" \
   "$work/vkd3d/vkd3d-proton-3.0.1-nv-dgc/x64" \
@@ -27,6 +28,7 @@ printf server >"$work/prefix/bin/wineserver"
 printf xuser >"$work/prefix/lib/wine/x86_64-windows/xgameruntime.dll"
 printf xuser >"$work/prefix/lib/wine/i386-windows/xgameruntime.dll"
 printf ntdll >"$work/prefix/lib/wine/x86_64-windows/ntdll.dll"
+printf ntdll >"$work/prefix/lib/wine/x86_64-unix/ntdll.so"
 for arch in x64 x32; do
   for dll in d3d8 d3d9 d3d10core d3d11 dxgi; do
     printf dxvk >"$work/dxvk/dxvk-3.0.1/$arch/$dll.dll"
@@ -43,6 +45,9 @@ source_date_epoch=0
 debian_suite=bullseye
 debian_snapshot=20260701T000000Z
 glibc_ceiling=2.31
+ntsync_enabled=0
+ntsync_uapi_version=linux-v6.14
+ntsync_uapi_sha256=006437ee52a3e04f921df77081eb5c21c44c71f598b10ac534c6ef9e78296262
 package_versions_sha256=test
 EOF
 tar -czf "$work/base.tar.gz" -C "$work/base" GDK-Proton10-32
@@ -52,6 +57,19 @@ base_sha="$(sha256sum "$work/base.tar.gz" | cut -d' ' -f1)"
 dxvk_sha="$(sha256sum "$work/dxvk.tar.gz" | cut -d' ' -f1)"
 vkd3d_sha="$(sha256sum "$work/vkd3d.tar.gz" | cut -d' ' -f1)"
 commit="$(git -C "$ROOT" rev-parse HEAD)"
+"$ROOT/.engine/package-engine.sh" \
+  v0.0.0 "$commit" \
+  "$work/prefix" "$work/base.tar.gz" \
+  "$work/dxvk.tar.gz" "$work/vkd3d.tar.gz" "$work/dist-bad" \
+  "$base_sha" "$dxvk_sha" "$vkd3d_sha"
+if "$ROOT/.engine/verify-engine.py" \
+  "$work/dist-bad/GDK-Proton-mcbe-gdk-v0.0.0.tar.gz" v0.0.0; then
+  echo "Verification accepted an engine without NTSync." >&2
+  exit 1
+fi
+printf 'server /dev/ntsync' >"$work/prefix/bin/wineserver"
+sed -i 's/^ntsync_enabled=0$/ntsync_enabled=1/' \
+  "$work/prefix/.mcbe-build-env"
 "$ROOT/.engine/package-engine.sh" \
   v0.0.0 "$commit" \
   "$work/prefix" "$work/base.tar.gz" \

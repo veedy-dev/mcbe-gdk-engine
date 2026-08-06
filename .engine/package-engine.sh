@@ -67,6 +67,9 @@ find "$engine" -depth -type d -name '__pycache__' -empty -delete
 cp "$ROOT/LICENSE" "$engine/WineGDK-LICENSE"
 cp "$ROOT/COPYING.LIB" "$engine/COPYING.LIB"
 cp "$ROOT/ATTRIBUTION.md" "$engine/ATTRIBUTION.md"
+install -d -m755 "$engine/LICENSES"
+cp "$ROOT/LICENSES/GPL-2.0-only" "$engine/LICENSES/GPL-2.0-only"
+cp "$ROOT/LICENSES/Linux-syscall-note" "$engine/LICENSES/Linux-syscall-note"
 
 python3 "$ROOT/.engine/write-manifest.py" \
   "$engine" "$VERSION" "$COMMIT" "$BASE_SHA" "$DXVK_SHA" "$VKD3D_SHA" \

@@ -43,9 +43,23 @@ with tarfile.open(archive, "r:gz") as bundle:
         raise SystemExit("manifest archive root mismatch")
     if len(manifest["source"]["commit"]) != 40:
         raise SystemExit("manifest source commit is not a full SHA")
+    build = manifest["build_environment"]
+    ntsync = manifest["dependencies"]["ntsync_uapi"]
+    if build.get("ntsync_enabled") != "1":
+        raise SystemExit("build did not enable NTSync")
+    if (
+        build.get("ntsync_uapi_version") != ntsync["version"]
+        or build.get("ntsync_uapi_sha256") != ntsync["sha256"]
+    ):
+        raise SystemExit("NTSync UAPI build metadata mismatch")
 
     for relative, expected in manifest["critical_files"].items():
         member = bundle.getmember(root + relative)
         actual = hashlib.sha256(bundle.extractfile(member).read()).hexdigest()
         if actual != expected:
             raise SystemExit(f"critical file hash mismatch: {relative}")
+
+    relative = "files/bin/wineserver"
+    member = bundle.getmember(root + relative)
+    if b"/dev/ntsync" not in bundle.extractfile(member).read():
+        raise SystemExit(f"NTSync support is missing: {relative}")

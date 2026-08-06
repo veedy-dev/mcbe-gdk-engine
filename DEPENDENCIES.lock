@@ -15,3 +15,6 @@ DEBIAN_IMAGE=debian:bullseye@sha256:6cb68b1be980a0e5b19be25582b34b5cf9cb466d52d0
 DEBIAN_SNAPSHOT=20260701T000000Z
 STEAM_RUNTIME_IMAGE=registry.gitlab.steamos.cloud/steamrt/sniper/platform@sha256:ab8bb63cd74743bfd7fbc2116c77055a077a59004b6f91455f6243ef931f95b1
 GLIBC_CEILING=2.31
+NTSYNC_UAPI_VERSION=linux-v6.14
+NTSYNC_UAPI_SOURCE=https://github.com/torvalds/linux/blob/v6.14/include/uapi/linux/ntsync.h
+NTSYNC_UAPI_SHA256=006437ee52a3e04f921df77081eb5c21c44c71f598b10ac534c6ef9e78296262

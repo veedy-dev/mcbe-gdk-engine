@@ -14,3 +14,6 @@
   `LICENSES/BedrockOnLinux-MIT`.
 - GDK-Proton binary base: Weather-OS/GDK-Proton `release10-32`; its archive
   retains all upstream licences and notices.
+- Linux NTSync UAPI header: Linux kernel v6.14, Elizabeth Figura and Linux
+  contributors; GPL-2.0 WITH Linux-syscall-note. The licence and exception
+  texts are in `LICENSES/GPL-2.0-only` and `LICENSES/Linux-syscall-note`.
