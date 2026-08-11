@@ -127,6 +127,18 @@ jobs:
         with:
           subject-path: dist/GDK-Proton-mcbe-gdk-${{ env.VERSION }}.tar.gz
 
+      - name: Generate release notes
+        run: |
+          previous="$(git describe --tags --abbrev=0 "$VERSION^" 2>/dev/null || true)"
+          if [[ -n "$previous" ]]; then
+            range="$previous..$VERSION"
+          else
+            range="$VERSION"
+          fi
+          git log --oneline --no-merges "$range" > release-notes.md
+          printf '\nFull changelog: https://github.com/%s/compare/%s\n' \
+            "$GITHUB_REPOSITORY" "$range" >> release-notes.md
+
       - name: Publish tagged release
         if: ${{ github.ref_type == 'tag' }}
         run: |
@@ -135,4 +147,4 @@ jobs:
             "dist/GDK-Proton-mcbe-gdk-$VERSION.tar.gz.sha256" \
             --verify-tag \
             --title "MCBE GDK engine $VERSION" \
-            --notes "Restores the complete matched WineGDK runtime so Xbox sign-in and GameCore compatibility work with NTSync enabled."
+            --notes-file release-notes.md
