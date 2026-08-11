@@ -14,6 +14,10 @@
   `LICENSES/BedrockOnLinux-MIT`.
 - GDK-Proton binary base: Weather-OS/GDK-Proton `release10-32`; its archive
   retains all upstream licences and notices.
+- vkd3d-proton graphics payload: `HansKristian-Work/vkd3d-proton` v3.0.1,
+  rebuilt by BedrockOnLinux with its NVIDIA DGC compatibility changes and
+  occluded frame-latency fix `f86aed2`; its archive retains the corresponding
+  source, build-provenance, licence, and notice files.
 - Linux NTSync UAPI header: Linux kernel v6.14, Elizabeth Figura and Linux
   contributors; GPL-2.0 WITH Linux-syscall-note. The licence and exception
   texts are in `LICENSES/GPL-2.0-only` and `LICENSES/Linux-syscall-note`.

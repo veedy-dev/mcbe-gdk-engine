@@ -77,10 +77,21 @@ for arch in x64 x32; do
   done
 done
 for arch in x64 x86; do
-  printf vkd3d >"$work/vkd3d/vkd3d-proton-3.0.1-nv-dgc/$arch/d3d12.dll"
-  printf vkd3d >"$work/vkd3d/vkd3d-proton-3.0.1-nv-dgc/$arch/d3d12core.dll"
+  printf 'vkd3d-%s-d3d12' "$arch" \
+    >"$work/vkd3d/vkd3d-proton-3.0.1-nv-dgc/$arch/d3d12.dll"
+  printf 'vkd3d-%s-d3d12core' "$arch" \
+    >"$work/vkd3d/vkd3d-proton-3.0.1-nv-dgc/$arch/d3d12core.dll"
 done
-printf licence >"$work/vkd3d/vkd3d-proton-3.0.1-nv-dgc/provenance/COPYING.LGPL-2.1"
+vkd3d_fixture="$work/vkd3d/vkd3d-proton-3.0.1-nv-dgc"
+(
+  cd "$vkd3d_fixture"
+  sha256sum \
+    x64/d3d12.dll x64/d3d12core.dll \
+    x86/d3d12.dll x86/d3d12core.dll \
+    >provenance/OUTPUT-SHA256SUMS
+)
+printf patch >"$vkd3d_fixture/provenance/fix-occluded-frame-latency.patch"
+printf licence >"$vkd3d_fixture/provenance/COPYING.LGPL-2.1"
 cat >"$prefix/.mcbe-build-env" <<EOF
 source_commit=$(git -C "$ROOT" rev-parse HEAD)
 source_date_epoch=0
@@ -151,3 +162,16 @@ for pair in i386-windows:syswow64 x86_64-windows:system32; do
   done
 done
 [[ "$(cat "$result/files/lib/wine/x86_64-windows/xgameruntime.dll.threading")" == threading ]]
+
+for pair in x64:x86_64-windows x86:i386-windows; do
+  source_arch="${pair%%:*}"
+  target_arch="${pair##*:}"
+  for dll in d3d12.dll d3d12core.dll; do
+    cmp "$vkd3d_fixture/$source_arch/$dll" \
+      "$result/files/lib/wine/vkd3d-proton/$target_arch/$dll"
+  done
+done
+cmp "$vkd3d_fixture/provenance/OUTPUT-SHA256SUMS" \
+  "$result/files/share/mcbe-gdk-engine/vkd3d-proton/OUTPUT-SHA256SUMS"
+cmp "$vkd3d_fixture/provenance/fix-occluded-frame-latency.patch" \
+  "$result/files/share/mcbe-gdk-engine/vkd3d-proton/fix-occluded-frame-latency.patch"

@@ -15,6 +15,10 @@ tar -xzf "$DXVK" -C "$work"
 tar -xzf "$VKD3D" -C "$work"
 dxvk="$work/dxvk-3.0.1"
 vkd3d="$work/vkd3d-proton-3.0.1-nv-dgc"
+(
+  cd "$vkd3d"
+  sha256sum -c provenance/OUTPUT-SHA256SUMS
+)
 
 for pair in x86_64-windows:x64 i386-windows:x32; do
   arch="${pair%%:*}"
