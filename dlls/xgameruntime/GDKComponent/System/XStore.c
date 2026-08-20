@@ -1,6 +1,6 @@
 /*
  * XStore composite stub for {0dd112ac-7c24-448c-b92b-3960fb5bd30c}
- * Uses proper XAsync pattern via the native threading DLL.
+ * No Microsoft Store service backs it; queries report a store error.
  */
 
 #include "../../private.h"
@@ -31,95 +31,51 @@ static HRESULT WINAPI store_CreateContext( void *iface, void *user, void **conte
     return S_OK;
 }
 
-/* --- XStore license async provider (proper XAsync pattern) --- */
-
-static HRESULT CALLBACK store_license_provider( XAsyncOp op, const XAsyncProviderData *data )
-{
-    if (!data) return E_POINTER;
-
-    switch (op)
-    {
-        case Begin:
-            return XAsyncSchedule( data->async, 0 );
-        case DoWork:
-            TRACE( "license DoWork\n" );
-            XAsyncComplete( data->async, S_OK, 144 );
-            break;
-        case GetResult:
-        {
-            /* XStoreGameLicense: skuStoreId[64], isActive, isTrialOwned, isDiscLicense, isTrial,
-               trialTimeRemaining(4), trialUniqueId[64], expirationDate(8) */
-            char *p = (char *)data->buffer;
-            memcpy( p, "9NBLGGH2JHXJ", 13 );  /* skuStoreId */
-            p[64] = 1;  /* isActive = true */
-            p[65] = 0;  /* isTrialOwnedByThisUser = false */
-            p[66] = 0;  /* isDiscLicense = false */
-            p[67] = 0;  /* isTrial = false */
-            /* trialTimeRemainingInSeconds at offset 68 = 0 */
-            /* trialUniqueId at offset 72 = empty */
-            /* expirationDate at offset 136 = 0 (no expiry) */
-            break;
-        }
-        case Cleanup:
-        case Cancel:
-            break;
-    }
-    return S_OK;
-}
+/* --- XStore queries ---
+ *
+ * There is no Microsoft Store service behind this composite: it exists so the
+ * title finds an XStore object at all, and the reconstructed vtable is the only
+ * description we have of its slots.  Both queries used to answer asynchronously
+ * with fabricated success - a hard-coded license and, for the product catalog,
+ * a zeroed buffer, which reaches the caller as S_OK plus a null query handle.
+ *
+ * Neither is safe.  A signed-in title reads that as "the store answered", marks
+ * its offer repository loaded and then walks containers the enumeration was
+ * supposed to fill, faulting on the first null one (bug #171).  The async form
+ * is worse still: the block those calls receive carries a task queue handle
+ * that belongs to neither this DLL's XTaskQueue nor the native GDK threading
+ * sidecar, so the completion cannot be dispatched where the title expects it
+ * and XAsyncBegin writes its bookkeeping into a block we cannot account for.
+ *
+ * Answer with a store error instead.  It needs no queue, touches nothing the
+ * title owns, and puts store code on a path it already has to handle. */
 
 static HRESULT WINAPI store_QueryGameLicenseAsync( void *iface, void *context, void *asyncBlock )
 {
-    HRESULT hr;
     TRACE( "iface %p, context %p, asyncBlock %p\n", iface, context, asyncBlock );
-    hr = XAsyncBegin( asyncBlock, NULL, store_QueryGameLicenseAsync, "XStoreQueryGameLicenseAsync", store_license_provider );
-    TRACE( "XAsyncBegin returned 0x%08lx\n", hr );
-    return hr;
+    WARN( "no store service available, failing the game-license query\n" );
+    return E_GAMESTORE_NETWORK_ERROR;
 }
 
 static HRESULT WINAPI store_QueryGameLicenseResult( void *iface, void *asyncBlock, void *license )
 {
     TRACE( "iface %p, asyncBlock %p, license %p\n", iface, asyncBlock, license );
-    return XAsyncGetResult( asyncBlock, store_QueryGameLicenseAsync, 144, license, NULL );
-}
-
-/* --- XStore associated products async provider --- */
-
-static HRESULT CALLBACK store_products_provider( XAsyncOp op, const XAsyncProviderData *data )
-{
-    if (!data) return E_POINTER;
-
-    switch (op)
-    {
-        case Begin:
-            return XAsyncSchedule( data->async, 0 );
-        case DoWork:
-            TRACE( "products DoWork\n" );
-            XAsyncComplete( data->async, S_OK, sizeof(void*) );
-            break;
-        case GetResult:
-            memset( data->buffer, 0, data->bufferSize );
-            break;
-        case Cleanup:
-        case Cancel:
-            break;
-    }
-    return S_OK;
+    return E_GAMESTORE_NETWORK_ERROR;
 }
 
 /* XStoreQueryAssociatedProductsAsync(this, storeContext, productKinds, maxItems, asyncBlock) */
 static HRESULT WINAPI store_QueryAssociatedProductsAsync( void *iface, void *context, UINT32 kinds, UINT32 maxItems, void *asyncBlock )
 {
-    HRESULT hr;
     TRACE( "iface %p, context %p, kinds %u, maxItems %u, asyncBlock %p\n", iface, context, kinds, maxItems, asyncBlock );
-    hr = XAsyncBegin( asyncBlock, NULL, store_QueryAssociatedProductsAsync, "XStoreQueryAssociatedProductsAsync", store_products_provider );
-    TRACE( "XAsyncBegin returned 0x%08lx\n", hr );
-    return hr;
+    WARN( "no store service available, failing the product query\n" );
+    return E_GAMESTORE_NETWORK_ERROR;
 }
 
 static HRESULT WINAPI store_QueryAssociatedProductsResult( void *iface, void *asyncBlock, void **result )
 {
-    TRACE( "asyncBlock %p\n", asyncBlock );
-    return XAsyncGetResult( asyncBlock, store_QueryAssociatedProductsAsync, sizeof(void*), result, NULL );
+    TRACE( "iface %p, asyncBlock %p, result %p\n", iface, asyncBlock, result );
+    if (result) *result = NULL;
+    return E_GAMESTORE_NETWORK_ERROR;
 }
 
 /* --- Per-slot stubs --- */
@@ -131,7 +87,7 @@ STORE_STUB(12) STORE_STUB(13) STORE_STUB(14) STORE_STUB(15)
 STORE_STUB(16) STORE_STUB(17) STORE_STUB(18) STORE_STUB(19)
 STORE_STUB(20) STORE_STUB(21)
 
-static BOOLEAN WINAPI store_return_true( void ) { return TRUE; }
+static BOOLEAN WINAPI store_return_false( void ) { return FALSE; }
 
 STORE_STUB(23) STORE_STUB(24) STORE_STUB(25) STORE_STUB(26)
 STORE_STUB(27) STORE_STUB(30)
@@ -147,9 +103,10 @@ STORE_STUB(63) STORE_STUB(64) STORE_STUB(65)
 
 static HRESULT WINAPI store_stub_66_real( void *iface, void *monitor, void *progress )
 {
-    TRACE( "returning installed\n" );
+    TRACE( "iface %p, monitor %p, progress %p\n", iface, monitor, progress );
     if (progress) memset( progress, 0, 32 );
-    return S_OK;
+    WARN( "no store service available, failing the installation query\n" );
+    return E_GAMESTORE_NETWORK_ERROR;
 }
 
 STORE_STUB(67) STORE_STUB(68) STORE_STUB(69)
@@ -170,7 +127,7 @@ static const void *store_vtable[98] = {
     S(4), store_QueryAssociatedProductsAsync, store_QueryAssociatedProductsResult, S(7),  /* 4-7 */
     store_QueryAssociatedProductsResult, S(9), S(10), S(11), S(12), S(13), S(14), S(15),  /* 8-15, [8]=result alias */
     S(16), S(17), S(18), S(19), S(20), S(21),                    /* 16-21 */
-    store_return_true,                                            /* 22: LicenseIsValid */
+    store_return_false,                                           /* 22: LicenseIsValid */
     S(23), S(24), S(25), S(26), S(27),                           /* 23-27 */
     store_QueryGameLicenseAsync, store_QueryGameLicenseResult,    /* 28-29 */
     S(30), S(31), S(32), S(33), S(34), S(35), S(36), S(37), S(38),  /* 30-38 */
@@ -178,7 +135,7 @@ static const void *store_vtable[98] = {
     S(47), S(48), S(49), S(50), S(51), S(52), S(53), S(54),     /* 47-54 */
     S(55), S(56), S(57), S(58), S(59), S(60), S(61), S(62),     /* 55-62 */
     S(63), S(64), S(65), store_stub_66_real, S(67), S(68), S(69),  /* 63-69 */
-    store_return_true,                                            /* 70: IsAvailable */
+    store_return_false,                                           /* 70: IsAvailable */
     S(71), S(72), S(73), S(74), S(75), S(76), S(77), S(78),     /* 71-78 */
     S(79), S(80), S(81), S(82), S(83),                           /* 79-83 */
     store_noop, store_noop, store_noop, store_noop,              /* 84-87 */
