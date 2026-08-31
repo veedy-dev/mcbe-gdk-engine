@@ -1,0 +1,150 @@
+name: Publish Lukas experimental engine
+
+on:
+  pull_request:
+    paths:
+      - ".github/workflows/lukas-experimental.yml"
+      - "EXPERIMENTAL-LUKAS.md"
+  push:
+    branches:
+      - main
+    paths:
+      - ".github/workflows/lukas-experimental.yml"
+      - "EXPERIMENTAL-LUKAS.md"
+
+permissions:
+  contents: read
+
+env:
+  VERSION: v0.2.0-ex
+  UPSTREAM_REPOSITORY: LukasPAH/GDK-Proton-Custom
+  UPSTREAM_TAG: release-10-32-4
+  UPSTREAM_ASSET: GDK-Proton10-32-Custom-4.tar.gz
+  UPSTREAM_SHA256: 4d19774c64451d4f1395dc4c5f4b6e8b5fdbc1ce6c05e29a855f5e0678b8800c
+  UPSTREAM_URL: https://github.com/LukasPAH/GDK-Proton-Custom/releases/download/release-10-32-4/GDK-Proton10-32-Custom-4.tar.gz
+
+jobs:
+  verify-and-publish:
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+        with:
+          persist-credentials: false
+
+      - name: Check whether the experimental release already exists
+        id: release
+        shell: bash
+        run: |
+          if [[ "$GITHUB_EVENT_NAME" == push ]] && \
+             gh release view "$VERSION" >/dev/null 2>&1; then
+            echo "skip=true" >>"$GITHUB_OUTPUT"
+            echo "Release $VERSION already exists; verification publish is idempotent."
+          else
+            echo "skip=false" >>"$GITHUB_OUTPUT"
+          fi
+
+      - name: Download exact upstream engine
+        if: ${{ steps.release.outputs.skip != 'true' }}
+        shell: bash
+        run: |
+          mkdir -p dist
+          curl -fL --retry 3 --retry-all-errors \
+            "$UPSTREAM_URL" -o "dist/$UPSTREAM_ASSET"
+
+      - name: Verify upstream digest and archive contract
+        if: ${{ steps.release.outputs.skip != 'true' }}
+        shell: bash
+        run: |
+          echo "$UPSTREAM_SHA256  dist/$UPSTREAM_ASSET" | sha256sum -c -
+          python3 - "dist/$UPSTREAM_ASSET" <<'PY'
+          import os
+          import stat
+          import sys
+          import tarfile
+          from pathlib import PurePosixPath
+
+          archive = sys.argv[1]
+          required_suffixes = {
+              "proton",
+              "files/bin/wine",
+              "files/bin/wineserver",
+              "files/lib/wine/x86_64-windows/xgameruntime.dll",
+          }
+          roots = set()
+          regular = {}
+          total = 0
+          with tarfile.open(archive, "r:gz") as bundle:
+              for count, member in enumerate(bundle, 1):
+                  if count > 200_000:
+                      raise SystemExit("archive contains too many entries")
+                  path = PurePosixPath(member.name)
+                  if not path.parts or path.is_absolute() or ".." in path.parts:
+                      raise SystemExit(f"unsafe archive path: {member.name}")
+                  roots.add(path.parts[0])
+                  if len(roots) > 1:
+                      raise SystemExit("archive must contain exactly one root directory")
+                  if member.isfile():
+                      total += member.size
+                      if total > 8_000_000_000:
+                          raise SystemExit("archive expands beyond 8 GB")
+                      relative = PurePosixPath(*path.parts[1:]).as_posix()
+                      regular[relative] = member
+                  elif not (member.isdir() or member.issym() or member.islnk()):
+                      raise SystemExit(f"unsupported archive member: {member.name}")
+
+          missing = sorted(required_suffixes - regular.keys())
+          if missing:
+              raise SystemExit("missing runtime files: " + ", ".join(missing))
+          for executable in ("proton", "files/bin/wine", "files/bin/wineserver"):
+              if not regular[executable].mode & 0o111:
+                  raise SystemExit(f"runtime executable is not executable: {executable}")
+          print(f"validated root {next(iter(roots))!r}, {len(regular)} files, {total} bytes")
+          PY
+
+      - name: Write checksum and provenance
+        if: ${{ steps.release.outputs.skip != 'true' }}
+        shell: bash
+        run: |
+          (cd dist && sha256sum "$UPSTREAM_ASSET" >"$UPSTREAM_ASSET.sha256")
+          python3 - <<'PY'
+          import json
+          import os
+          from pathlib import Path
+
+          provenance = {
+              "schema": 1,
+              "release": os.environ["VERSION"],
+              "distribution": "exact-upstream-binary-mirror",
+              "upstream": {
+                  "repository": os.environ["UPSTREAM_REPOSITORY"],
+                  "tag": os.environ["UPSTREAM_TAG"],
+                  "asset": os.environ["UPSTREAM_ASSET"],
+                  "url": os.environ["UPSTREAM_URL"],
+                  "sha256": os.environ["UPSTREAM_SHA256"],
+              },
+              "authentication": "in-game remote-connect device code",
+              "known_limitations": ["Parties unsupported", "Realms unsupported"],
+              "repository_commit": os.environ["GITHUB_SHA"],
+          }
+          Path("dist/provenance-v0.2.0-ex.json").write_text(
+              json.dumps(provenance, indent=2, sort_keys=True) + "\n",
+              encoding="utf-8",
+          )
+          PY
+
+      - name: Publish v0.2.0-ex prerelease
+        if: ${{ github.event_name == 'push' && steps.release.outputs.skip != 'true' }}
+        shell: bash
+        run: |
+          gh release create "$VERSION" \
+            "dist/$UPSTREAM_ASSET" \
+            "dist/$UPSTREAM_ASSET.sha256" \
+            "dist/provenance-v0.2.0-ex.json" \
+            --target "$GITHUB_SHA" \
+            --prerelease \
+            --title "MCBE GDK engine $VERSION — Lukas in-game login experiment" \
+            --notes-file EXPERIMENTAL-LUKAS.md
