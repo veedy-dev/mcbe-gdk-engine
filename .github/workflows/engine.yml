@@ -16,6 +16,7 @@ permissions:
 
 jobs:
   build:
+    if: ${{ github.ref_type != 'tag' || !endsWith(github.ref_name, '-ex') }}
     runs-on: ubuntu-24.04
     permissions:
       contents: write
