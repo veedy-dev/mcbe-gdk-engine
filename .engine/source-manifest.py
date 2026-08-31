@@ -11,6 +11,7 @@ excluded_files = {
     "ATTRIBUTION.md",
     "DEPENDENCIES.lock",
     "ENGINE.md",
+    "EXPERIMENTAL-LUKAS.md",
     "SOURCE-SHA256SUMS",
 }
 
