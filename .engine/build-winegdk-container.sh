@@ -56,7 +56,8 @@ export SOURCE_DATE_EPOCH
     exit 1
   }
   make -j"$(nproc)"
-  xvfb-run -a env WINETEST_INTERACTIVE=0 \
+  xvfb-run -a env WINEDLLOVERRIDES="mscoree,mshtml=" \
+    WINETEST_INTERACTIVE=0 \
     make dlls/xgameruntime/tests/x86_64-windows/xgameruntime.ok
   make install
 )
