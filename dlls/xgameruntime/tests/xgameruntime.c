@@ -829,6 +829,8 @@ START_TEST(xgameruntime)
 {
     HRESULT hr;
 
+    SetEnvironmentVariableA( "MCBE_GDK_REMOTE_CONNECT", NULL );
+
     setup_test_game_config();
     hr = RoInitialize(RO_INIT_MULTITHREADED);
     ok(hr == S_OK, "RoInitialize failed, hr %#lx\n", hr);

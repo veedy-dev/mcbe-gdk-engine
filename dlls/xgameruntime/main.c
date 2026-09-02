@@ -18,6 +18,8 @@
  * Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA 02110-1301, USA
  */
 
+#include <stdio.h>
+
 #include "initguid.h"
 #include "private.h"
 #include "GDKComponent/InitInternalGDKC.h"
@@ -32,6 +34,13 @@ static SRWLOCK native_process_task_queue_lock = SRWLOCK_INIT;
 static LONG native_process_task_queue_ready;
 static INIT_ONCE native_threading_impl_once = INIT_ONCE_STATIC_INIT;
 static IXThreadingImpl *native_threading_impl;
+
+#define NATIVE_REMOTE_CONNECT_GDK_VERSION 10002
+#define NATIVE_REMOTE_CONNECT_GS_VERSION 7822
+#define NATIVE_REMOTE_CONNECT_MODE 0x0a
+
+static LONG remote_connect_requested;
+static LONG native_remote_connect_ready;
 
 HRESULT WINAPI DllCanUnloadNow(void)
 {
@@ -152,6 +161,89 @@ IXThreadingImpl *WineGDKGetNativeThreading( void )
     return native_threading_impl;
 }
 
+static BOOL remote_connect_environment_enabled( void )
+{
+    char value[2];
+
+    return GetEnvironmentVariableA( "MCBE_GDK_REMOTE_CONNECT", value,
+            ARRAY_SIZE(value) ) == 1 && value[0] == '1';
+}
+
+static BOOL remote_connect_json_value_valid( const char *value,
+        SIZE_T max_length )
+{
+    SIZE_T length;
+
+    if (!value) return FALSE;
+    for (length = 0; length <= max_length && value[length]; ++length)
+    {
+        unsigned char byte = value[length];
+
+        if (byte < 0x20 || byte == '"' || byte == '\\') return FALSE;
+    }
+    return length && length <= max_length;
+}
+
+static void CALLBACK remote_connect_show( void *context, UINT32 user_identifier,
+        XUserPlatformOperation operation, const char *url, const char *code,
+        SIZE_T qr_code_size, const void *qr_code )
+{
+    FILE *file;
+    int written;
+
+    UNREFERENCED_PARAMETER( context );
+    UNREFERENCED_PARAMETER( qr_code_size );
+    UNREFERENCED_PARAMETER( qr_code );
+
+    TRACE( "remote-connect show user %u, operation %u\n",
+           user_identifier, operation );
+    if (!remote_connect_json_value_valid( url, 2048 ) ||
+        !remote_connect_json_value_valid( code, 64 ))
+    {
+        WARN( "remote-connect request contains invalid URL or code\n" );
+        return;
+    }
+
+    file = fopen( "../login.json", "w" );
+    if (!file)
+    {
+        WARN( "could not open ../login.json\n" );
+        return;
+    }
+    written = fprintf( file,
+            "{\"verification_uri\":\"%s\",\"user_code\":\"%s\"}",
+            url, code );
+    if (written < 0) WARN( "could not write ../login.json\n" );
+    if (fclose( file )) WARN( "could not close ../login.json\n" );
+}
+
+static void CALLBACK remote_connect_close( void *context,
+        UINT32 user_identifier, XUserPlatformOperation operation )
+{
+    UNREFERENCED_PARAMETER( context );
+    TRACE( "remote-connect close user %u, operation %u\n",
+           user_identifier, operation );
+}
+
+static HRESULT setup_native_remote_connect( QueryApiImpl_ext query_api )
+{
+    XUserPlatformRemoteConnectEventHandlers handlers = {0};
+    IXUserPlatform *user = NULL;
+    HRESULT hr;
+
+    if (!query_api) return HRESULT_FROM_WIN32( ERROR_PROC_NOT_FOUND );
+    hr = query_api( &CLSID_XUserImpl, &IID_IXUserPlatform, (void **)&user );
+    if (FAILED( hr ) || !user) return FAILED( hr ) ? hr : E_NOINTERFACE;
+
+    handlers.context = NULL;
+    handlers.show = (void *)&remote_connect_show;
+    handlers.close = (void *)&remote_connect_close;
+    hr = IXUserImpl_XUserPlatformRemoteConnectSetEventHandlers(
+            (IXUserImpl *)user, NULL, &handlers );
+    IXUserImpl_Release( (IXUserImpl *)user );
+    return hr;
+}
+
 static BOOL CALLBACK initialize_native_threading_once( INIT_ONCE *once,
         void *parameter, void **context )
 {
@@ -188,6 +280,20 @@ static BOOL CALLBACK initialize_native_threading_once( INIT_ONCE *once,
      * racing to replace the queue while XAsync completions are in flight. */
     query_api = (QueryApiImpl_ext)GetProcAddress(
             xgameruntime_threading, "QueryApiImpl" );
+    if (InterlockedCompareExchange( &remote_connect_requested, 0, 0 ) &&
+        SUCCEEDED( xgameruntime_threading_init_result ))
+    {
+        hr = setup_native_remote_connect( query_api );
+        if (SUCCEEDED( hr ))
+        {
+            InterlockedExchange( &native_remote_connect_ready, 1 );
+            TRACE( "native remote-connect handlers ready\n" );
+        }
+        else
+        {
+            WARN( "native remote-connect setup failed: 0x%08lx\n", hr );
+        }
+    }
     hr = query_api ? query_api( &CLSID_XThreadingImpl, &IID_IXThreadingImpl,
             (void **)&threading ) : HRESULT_FROM_WIN32( ERROR_PROC_NOT_FOUND );
     TRACE( "native QueryApiImpl for XThreading returned 0x%08lx, threading=%p\n",
@@ -208,6 +314,17 @@ HRESULT WINAPI InitializeApiImplEx2( ULONG gdkVer, ULONG gsVer, CHAR mode, INITI
         gdkVer, gsVer, mode, options
     };
     TRACE("gdkVer %ld, gsVer %ld, mode %d, options %p\n", gdkVer, gsVer, mode, options);
+    InterlockedExchange( &remote_connect_requested,
+            remote_connect_environment_enabled() );
+    if (InterlockedCompareExchange( &remote_connect_requested, 0, 0 ))
+    {
+        /* Match the pinned GDK-Proton 10-32 sidecar contract used by the
+         * proven Lukas remote-connect implementation. */
+        native_params.gdkVer = NATIVE_REMOTE_CONNECT_GDK_VERSION;
+        native_params.gsVer = NATIVE_REMOTE_CONNECT_GS_VERSION;
+        native_params.mode = NATIVE_REMOTE_CONNECT_MODE;
+        native_params.options = NULL;
+    }
 
     /* Initialize COM for the GDK runtime - needed for DllGetClassObject / CoCreateInstance.
      * Without this, XSAPI's internal COM calls fail with "apartment not initialised". */
@@ -396,6 +513,10 @@ HRESULT WINAPI QueryApiImpl( const GUID *runtimeClassId, REFIID interfaceId, voi
     }
     else if ( IsEqualGUID( runtimeClassId, &CLSID_XUserImpl ) )
     {
+        if (InterlockedCompareExchange( &native_remote_connect_ready, 0, 0 ) &&
+            func)
+            return query_api_result( func( runtimeClassId, interfaceId, out ),
+                                     runtimeClassId, interfaceId );
         return query_api_result( IXUserImpl_QueryInterface( x_user_impl,
                                  interfaceId, out ), runtimeClassId, interfaceId );
     }

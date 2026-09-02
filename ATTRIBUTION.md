@@ -10,6 +10,9 @@
 - GameCore XGameProtocol implementation: LukasPAH, sourced from
   `LukasPAH/WineGDK` commit
   `ffb5ffe9d67878afe546dae1232fca77fa7cefcc`.
+- XUser remote-connect mode and device-code callback: LukasPAH, derived from
+  `LukasPAH/WineGDK` commit
+  `f68ab53fc49062bcafe15b096f15038d42c05861`.
 - `.engine/pin-apt-snapshot.sh`: BedrockOnLinux contributors, MIT licence in
   `LICENSES/BedrockOnLinux-MIT`.
 - GDK-Proton binary base: Weather-OS/GDK-Proton `release10-32`; its archive
