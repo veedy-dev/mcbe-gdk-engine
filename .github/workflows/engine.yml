@@ -37,7 +37,7 @@ jobs:
           else
             version="${{ inputs.version }}"
           fi
-          [[ "$version" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]
+          [[ "$version" =~ ^v[0-9]+\.[0-9]+\.[0-9]+(-experimental)?$ ]]
           echo "VERSION=$version" >>"$GITHUB_ENV"
 
       - name: Prepare build volume
@@ -143,9 +143,12 @@ jobs:
       - name: Publish tagged release
         if: ${{ github.ref_type == 'tag' }}
         run: |
+          prerelease=()
+          [[ "$VERSION" == *-experimental ]] && prerelease=(--prerelease)
           gh release create "$VERSION" \
             "dist/GDK-Proton-mcbe-gdk-$VERSION.tar.gz" \
             "dist/GDK-Proton-mcbe-gdk-$VERSION.tar.gz.sha256" \
             --verify-tag \
             --title "MCBE GDK engine $VERSION" \
+            "${prerelease[@]}" \
             --notes-file release-notes.md

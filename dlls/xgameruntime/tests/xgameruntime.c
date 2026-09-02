@@ -24,6 +24,7 @@
 #define COBJMACROS
 #include <windef.h>
 #include <winbase.h>
+#include <winreg.h>
 #include <winternl.h>
 #include <roapi.h>
 #include <activation.h>
@@ -47,6 +48,8 @@
 // April 2025 Release of GDK
 #define TEST_GDKC_VERSION 10001L
 #define TEST_GAMING_SERVICES_VERSION 3181L
+#define TEST_CURRENT_GDKC_VERSION 10002L
+#define TEST_NEWER_GAMING_SERVICES_VERSION 6248L
 
 static HMODULE xgameruntime = NULL;
 
@@ -237,8 +240,14 @@ static inline HRESULT CALLBACK XAsyncProvider_testCallback( XAsyncOp op, const X
 
 static void test_GDKComponentInit(void)
 {
-    HRESULT hr;
+    static const WCHAR key_name[] = L"Software\\Microsoft\\GamingServices";
+    static const WCHAR value_name[] = L"IgnoreVersionMismatch";
+    static const WCHAR wrong_type[] = L"1";
     LPCSTR xgameruntime_libname = "xgameruntime.dll";
+    DWORD value;
+    LSTATUS status;
+    HRESULT hr;
+    HKEY key;
 
     xgameruntime = LoadLibraryA( xgameruntime_libname );
     ok( xgameruntime != NULL, "xgameruntime.dll failed to load! error code: %lu\n", GetLastError() );
@@ -249,6 +258,42 @@ static void test_GDKComponentInit(void)
     hr = InitializeApiImpl_fun( TEST_GDKC_VERSION,
                                 TEST_GAMING_SERVICES_VERSION );
     ok( hr == S_OK, "got hr %#lx.\n", hr );
+
+    status = RegCreateKeyExW( HKEY_LOCAL_MACHINE, key_name, 0, NULL, 0,
+                              KEY_QUERY_VALUE | KEY_SET_VALUE, NULL, &key, NULL );
+    ok( status == ERROR_SUCCESS, "RegCreateKeyExW failed, status %lu.\n", status );
+    if (status == ERROR_SUCCESS)
+    {
+        RegDeleteValueW( key, value_name );
+        hr = InitializeApiImpl_fun( TEST_CURRENT_GDKC_VERSION,
+                                    TEST_NEWER_GAMING_SERVICES_VERSION );
+        ok( hr == E_GAMERUNTIME_VERSION_MISMATCH, "missing value returned %#lx.\n", hr );
+
+        status = RegSetValueExW( key, value_name, 0, REG_SZ,
+                                 (const BYTE *)wrong_type, sizeof(wrong_type) );
+        ok( status == ERROR_SUCCESS, "RegSetValueExW failed, status %lu.\n", status );
+        hr = InitializeApiImpl_fun( TEST_CURRENT_GDKC_VERSION,
+                                    TEST_NEWER_GAMING_SERVICES_VERSION );
+        ok( hr == E_GAMERUNTIME_VERSION_MISMATCH, "wrong type returned %#lx.\n", hr );
+
+        value = 0;
+        status = RegSetValueExW( key, value_name, 0, REG_DWORD,
+                                 (const BYTE *)&value, sizeof(value) );
+        ok( status == ERROR_SUCCESS, "RegSetValueExW failed, status %lu.\n", status );
+        hr = InitializeApiImpl_fun( TEST_CURRENT_GDKC_VERSION,
+                                    TEST_NEWER_GAMING_SERVICES_VERSION );
+        ok( hr == E_GAMERUNTIME_VERSION_MISMATCH, "zero value returned %#lx.\n", hr );
+
+        value = 1;
+        status = RegSetValueExW( key, value_name, 0, REG_DWORD,
+                                 (const BYTE *)&value, sizeof(value) );
+        ok( status == ERROR_SUCCESS, "RegSetValueExW failed, status %lu.\n", status );
+        hr = InitializeApiImpl_fun( TEST_CURRENT_GDKC_VERSION,
+                                    TEST_NEWER_GAMING_SERVICES_VERSION );
+        ok( hr == S_OK, "enabled value returned %#lx.\n", hr );
+        RegDeleteValueW( key, value_name );
+        RegCloseKey( key );
+    }
 
     QueryApiImpl_fun = (QueryApiImplProc)GetProcAddress( xgameruntime,
                                                         "QueryApiImpl" );

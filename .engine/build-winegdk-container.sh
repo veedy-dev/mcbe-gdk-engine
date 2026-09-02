@@ -50,13 +50,13 @@ export SOURCE_DATE_EPOCH
   CFLAGS="$WINE_CFLAGS" CROSSCFLAGS="$WINE_CFLAGS" \
     CPPFLAGS="-I$SOURCE/.engine/uapi" "$SOURCE/configure" \
     --enable-archs=i386,x86_64 \
-    --disable-tests \
     --prefix="$PREFIX"
   grep -qx '#define HAVE_LINUX_NTSYNC_H 1' include/config.h || {
     echo "Wine configure did not enable NTSync." >&2
     exit 1
   }
   make -j"$(nproc)"
+  WINETEST_INTERACTIVE=0 make -C dlls/xgameruntime/tests test
   make install
 )
 rm -rf "$PREFIX/include"

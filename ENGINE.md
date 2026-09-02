@@ -27,7 +27,8 @@ Wine and WineGDK remain licensed under the LGPL-2.1-or-later terms in
 
 ## Releases
 
-Tags use `vX.Y.Z`. Each release contains:
+Stable tags use `vX.Y.Z`; experimental tags use `vX.Y.Z-experimental` and
+publish GitHub prereleases. Each release contains:
 
 - `GDK-Proton-mcbe-gdk-vX.Y.Z.tar.gz`
 - `GDK-Proton-mcbe-gdk-vX.Y.Z.tar.gz.sha256`

@@ -175,3 +175,12 @@ cmp "$vkd3d_fixture/provenance/OUTPUT-SHA256SUMS" \
   "$result/files/share/mcbe-gdk-engine/vkd3d-proton/OUTPUT-SHA256SUMS"
 cmp "$vkd3d_fixture/provenance/fix-occluded-frame-latency.patch" \
   "$result/files/share/mcbe-gdk-engine/vkd3d-proton/fix-occluded-frame-latency.patch"
+
+"$ROOT/.engine/package-engine.sh" \
+  v0.0.0-experimental "$commit" \
+  "$prefix" "$work/base.tar.gz" \
+  "$work/dxvk.tar.gz" "$work/vkd3d.tar.gz" "$work/dist-experimental" \
+  "$base_sha" "$dxvk_sha" "$vkd3d_sha"
+"$ROOT/.engine/verify-engine.py" \
+  "$work/dist-experimental/GDK-Proton-mcbe-gdk-v0.0.0-experimental.tar.gz" \
+  v0.0.0-experimental

@@ -15,8 +15,8 @@ DXVK_SHA="${9:?usage: package-engine.sh VERSION COMMIT PREFIX BASE DXVK VKD3D DI
 VKD3D_SHA="${10:?usage: package-engine.sh VERSION COMMIT PREFIX BASE DXVK VKD3D DIST BASE_SHA DXVK_SHA VKD3D_SHA}"
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd -P)"
 
-[[ "$VERSION" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]] || {
-  echo "Version must use vX.Y.Z." >&2
+[[ "$VERSION" =~ ^v[0-9]+\.[0-9]+\.[0-9]+(-experimental)?$ ]] || {
+  echo "Version must use vX.Y.Z or vX.Y.Z-experimental." >&2
   exit 2
 }
 [[ "$COMMIT" =~ ^[0-9a-f]{40}$ ]] || {
