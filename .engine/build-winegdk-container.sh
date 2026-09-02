@@ -27,7 +27,7 @@ export DEBIAN_FRONTEND=noninteractive
 apt-get update -qq
 apt-get install -y --no-install-recommends \
   build-essential ca-certificates bison flex gettext git pkg-config \
-  python3-minimal gcc-mingw-w64-i686 gcc-mingw-w64-x86-64 \
+  python3-minimal xvfb xauth gcc-mingw-w64-i686 gcc-mingw-w64-x86-64 \
   libasound2-dev libdbus-1-dev libegl1-mesa-dev libfontconfig1-dev \
   libfreetype6-dev libgl1-mesa-dev libgnutls28-dev libgstreamer1.0-dev \
   libgstreamer-plugins-base1.0-dev libkrb5-dev libpcap-dev libpulse-dev \
@@ -56,7 +56,8 @@ export SOURCE_DATE_EPOCH
     exit 1
   }
   make -j"$(nproc)"
-  WINETEST_INTERACTIVE=0 make -C dlls/xgameruntime/tests test
+  xvfb-run -a env WINETEST_INTERACTIVE=0 \
+    make dlls/xgameruntime/tests/x86_64-windows/xgameruntime.ok
   make install
 )
 rm -rf "$PREFIX/include"
